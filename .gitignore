@@ -1,0 +1,49 @@
+# === Entorno Virtual ===
+venv/
+.venv/
+env/
+ENV/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# === Variables de entorno / Secretos ===
+.env
+.env.local
+.env.*.local
+*.secret
+
+# === Base de datos local ===
+*.db
+*.sqlite3
+
+# === Docker volumes locales ===
+postgres_data/
+
+# === IDEs ===
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# === Sistema Operativo ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Logs ===
+*.log
+logs/
+
+# === Pytest / Coverage ===
+.pytest_cache/
+.coverage
+htmlcov/
