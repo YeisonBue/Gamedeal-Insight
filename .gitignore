@@ -43,6 +43,9 @@ desktop.ini
 *.log
 logs/
 
+# === Scraping output (archivos JSON generados, pueden ser grandes) ===
+scraping/output/*.json
+
 # === Pytest / Coverage ===
 .pytest_cache/
 .coverage
