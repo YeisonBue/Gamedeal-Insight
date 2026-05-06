@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GAMEDEAL.IO | Catálogo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@500;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #080c14;
+            --surface: #0d1424;
+            --card: #111827;
+            --border: #1e3253;
+            --cyan: #00d4ff;
+            --purple: #8b5cf6;
+            --green: #10b981;
+            --red: #ef4444;
+            --gold: #f59e0b;
+            --text: #e2e8f0;
+            --muted: #6b7280;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Inter', system-ui, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(0, 212, 255, 0.12), transparent 30%),
+                radial-gradient(circle at top right, rgba(139, 92, 246, 0.12), transparent 30%),
+                var(--bg);
+        }
+
+        body::before,
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        body::before {
+            background-image:
+                linear-gradient(rgba(0, 212, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(139, 92, 246, 0.05) 1px, transparent 1px);
+            background-size: 66px 66px;
+            mask-image: linear-gradient(to bottom, rgba(255,255,255,0.9), transparent 90%);
+        }
+
+        body::after {
+            background: repeating-linear-gradient(180deg, rgba(255,255,255,0.03) 0, rgba(255,255,255,0.03) 2px, transparent 2px, transparent 5px);
+            opacity: 0.1;
+        }
+
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 40;
+            backdrop-filter: blur(18px);
+            background: rgba(8, 12, 20, 0.82);
+            border-bottom: 1px solid rgba(30, 50, 83, 0.85);
+        }
+
+        .nav-inner,
+        .page-shell,
+        .footer-inner {
+            width: min(1240px, calc(100% - 32px));
+            margin: 0 auto;
+        }
+
+        .nav-inner {
+            min-height: 76px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 0.18em;
+            font-weight: 800;
+            color: var(--cyan);
+            text-decoration: none;
+            text-shadow: 0 0 16px rgba(0, 212, 255, 0.4);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 18px;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: var(--text);
+            text-decoration: none;
+            font-weight: 600;
+            opacity: 0.82;
+        }
+
+        .nav-links a.active,
+        .nav-links a:hover {
+            color: var(--cyan);
+            opacity: 1;
+        }
+
+        .page-shell {
+            padding: 108px 0 64px;
+        }
+
+        .hero,
+        .filters,
+        .catalog-panel,
+        .footer-card,
+        .error-banner {
+            border: 1px solid var(--border);
+            background: rgba(13, 20, 36, 0.86);
+            backdrop-filter: blur(12px);
+        }
+
+        .hero {
+            padding: 28px;
+            border-radius: 28px;
+            box-shadow: 0 28px 60px rgba(0, 0, 0, 0.3);
+            margin-bottom: 22px;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: rgba(0, 212, 255, 0.12);
+            border: 1px solid rgba(0, 212, 255, 0.28);
+            color: var(--cyan);
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            font-size: 0.78rem;
+            margin-bottom: 12px;
+        }
+
+        h1,
+        h2,
+        .counter,
+        .chip,
+        .price-value {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(2rem, 4vw, 3.35rem);
+        }
+
+        .hero p {
+            margin: 14px 0 0;
+            max-width: 68ch;
+            color: rgba(226, 232, 240, 0.76);
+            line-height: 1.75;
+        }
+
+        .filters {
+            padding: 22px;
+            border-radius: 24px;
+            display: grid;
+            gap: 18px;
+            margin-bottom: 22px;
+        }
+
+        .control-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1.4fr) minmax(240px, 280px) auto;
+            gap: 14px;
+            align-items: center;
+        }
+
+        .search,
+        .sort-select {
+            width: 100%;
+            border: 1px solid rgba(30, 50, 83, 0.95);
+            border-radius: 16px;
+            background: rgba(17, 24, 39, 0.95);
+            color: var(--text);
+            padding: 14px 16px;
+            font-size: 0.96rem;
+            outline: none;
+        }
+
+        .search:focus,
+        .sort-select:focus {
+            border-color: rgba(0, 212, 255, 0.55);
+            box-shadow: 0 0 0 4px rgba(0, 212, 255, 0.12);
+        }
+
+        .counter {
+            justify-self: end;
+            padding: 13px 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(139, 92, 246, 0.35);
+            background: rgba(139, 92, 246, 0.15);
+            font-size: 0.84rem;
+            letter-spacing: 0.08em;
+        }
+
+        .chip-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .chip {
+            border: 1px solid rgba(30, 50, 83, 0.95);
+            background: rgba(17, 24, 39, 0.92);
+            color: var(--text);
+            border-radius: 999px;
+            padding: 10px 14px;
+            cursor: pointer;
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .chip.active,
+        .chip:hover {
+            border-color: rgba(0, 212, 255, 0.45);
+            transform: translateY(-1px);
+            box-shadow: 0 0 16px rgba(0, 212, 255, 0.12);
+        }
+
+        .catalog-panel {
+            padding: 24px;
+            border-radius: 28px;
+            box-shadow: 0 28px 60px rgba(0, 0, 0, 0.26);
+        }
+
+        .catalog-head {
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .catalog-head p {
+            margin: 10px 0 0;
+            color: rgba(226, 232, 240, 0.72);
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 18px;
+        }
+
+        .deal-card {
+            text-decoration: none;
+            color: var(--text);
+            border-radius: 22px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: rgba(17, 24, 39, 0.72);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+            box-shadow: 0 20px 38px rgba(0, 0, 0, 0.22);
+        }
+
+        .deal-card:hover {
+            transform: scale(1.03);
+            border-color: rgba(0, 212, 255, 0.55);
+            box-shadow: 0 0 0 1px rgba(0, 212, 255, 0.12), 0 20px 40px rgba(0, 212, 255, 0.12), 0 18px 40px rgba(139, 92, 246, 0.16);
+        }
+
+        .card-media {
+            position: relative;
+            aspect-ratio: 16 / 9;
+            overflow: hidden;
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.18), rgba(139, 92, 246, 0.18));
+        }
+
+        .card-media img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .image-fallback {
+            position: absolute;
+            inset: 0;
+            display: none;
+            place-items: center;
+            background: linear-gradient(135deg, rgba(17,24,39,.96), rgba(13,20,36,.92));
+            color: rgba(226,232,240,.72);
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 0.18em;
+            font-size: 0.82rem;
+        }
+
+        .card-body {
+            padding: 18px;
+            display: grid;
+            gap: 14px;
+        }
+
+        .card-top {
+            display: flex;
+            gap: 12px;
+            justify-content: space-between;
+            align-items: start;
+        }
+
+        .card-title {
+            margin: 0;
+            font-size: 1.04rem;
+            line-height: 1.35;
+        }
+
+        .card-dev {
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        .tag-row,
+        .reputation-row,
+        .price-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .badge,
+        .discount {
+            border-radius: 999px;
+            padding: 8px 12px;
+            font-size: 0.78rem;
+            font-weight: 800;
+        }
+
+        .discount {
+            background: rgba(16, 185, 129, 0.18);
+            color: #7df6ca;
+            border: 1px solid rgba(16, 185, 129, 0.45);
+            box-shadow: 0 0 16px rgba(16, 185, 129, 0.16);
+        }
+
+        .badge.genre {
+            background: rgba(139, 92, 246, 0.16);
+            color: #d7c7ff;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+
+        .badge.score {
+            background: rgba(245, 158, 11, 0.15);
+            color: #ffd580;
+            border: 1px solid rgba(245, 158, 11, 0.28);
+        }
+
+        .stars { color: var(--gold); letter-spacing: 0.1em; }
+        .old-price { color: rgba(239, 68, 68, 0.9); text-decoration: line-through; }
+        .price-value { font-size: 1.12rem; color: white; }
+
+        .empty-state,
+        .status-note,
+        .error-banner {
+            border-radius: 18px;
+            padding: 18px;
+            text-align: center;
+        }
+
+        .empty-state,
+        .status-note {
+            border: 1px dashed rgba(107, 114, 128, 0.35);
+            color: rgba(226, 232, 240, 0.76);
+            background: rgba(13, 20, 36, 0.9);
+        }
+
+        .error-banner {
+            margin-bottom: 18px;
+            background: rgba(239, 68, 68, 0.12);
+            color: #fecaca;
+        }
+
+        footer { padding-bottom: 32px; }
+        .footer-card { border-radius: 24px; padding: 22px; }
+        .footer-inner {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            color: rgba(226, 232, 240, 0.72);
+        }
+        .footer-links { display: flex; gap: 16px; flex-wrap: wrap; }
+        .footer-links a { color: var(--text); text-decoration: none; }
+
+        @media (max-width: 840px) {
+            .control-row {
+                grid-template-columns: 1fr;
+            }
+
+            .counter {
+                justify-self: start;
+            }
+        }
+
+        @media (max-width: 720px) {
+            .nav-inner {
+                min-height: 88px;
+                padding: 14px 0;
+                align-items: flex-start;
+                justify-content: center;
+                flex-direction: column;
+            }
+
+            .page-shell { padding-top: 122px; }
+            .catalog-head,
+            .footer-inner { flex-direction: column; align-items: flex-start; }
+            .hero,
+            .filters,
+            .catalog-panel { padding: 22px; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-inner">
+            <a class="logo" href="/dashboard">GAMEDEAL.IO</a>
+            <div class="nav-links">
+                <a href="/dashboard">Dashboard</a>
+                <a href="/catalog" class="active">Catálogo</a>
+                <a href="https://github.com/YeisonBue/Gamedeal-Insight" target="_blank" rel="noreferrer">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="page-shell">
+        <section class="hero">
+            <span class="eyebrow">Catálogo completo</span>
+            <h1>Encuentra tu próximo deal con filtros en vivo y orden inteligente.</h1>
+            <p>
+                Explora todo el inventario sincronizado desde Steam. Filtra por género, busca por título o
+                desarrollador y ordena por descuento, reputación o precio sin recargar la página.
+            </p>
+        </section>
+
+        <section class="filters">
+            <div class="control-row">
+                <input id="searchInput" class="search" type="search" placeholder="Buscar por juego o desarrollador...">
+                <select id="sortSelect" class="sort-select">
+                    <option value="discount">Mayor Descuento</option>
+                    <option value="rating">Mejor Valorado</option>
+                    <option value="price-asc">Precio ↑</option>
+                    <option value="price-desc">Precio ↓</option>
+                    <option value="name">Nombre A-Z</option>
+                </select>
+                <div id="counter" class="counter">0 juegos encontrados</div>
+            </div>
+            <div id="genreChips" class="chip-row"></div>
+        </section>
+
+        <div id="catalogError" class="error-banner" hidden></div>
+
+        <section class="catalog-panel">
+            <div class="catalog-head">
+                <div>
+                    <h2 style="margin:0;">Biblioteca de deals</h2>
+                    <p>Resultados generados desde <code>/api/deals</code> y filtros dinámicos poblados desde <code>/api/games</code>.</p>
+                </div>
+            </div>
+            <div id="catalogGrid" class="card-grid"></div>
+            <div id="emptyState" class="empty-state" hidden>No hay resultados.</div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="page-shell" style="padding-top:0; padding-bottom:0;">
+            <div class="footer-card">
+                <div class="footer-inner">
+                    <div>© 2026 GAMEDEAL.IO · Catálogo responsive con búsqueda en tiempo real.</div>
+                    <div class="footer-links">
+                        <a href="/dashboard">Dashboard</a>
+                        <a href="/catalog">Catálogo</a>
+                        <a href="https://github.com/YeisonBue/Gamedeal-Insight" target="_blank" rel="noreferrer">Repositorio</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const state = {
+            deals: [],
+            genres: [],
+            search: '',
+            genre: 'all',
+            sort: 'discount',
+        };
+
+        const grid = document.getElementById('catalogGrid');
+        const emptyState = document.getElementById('emptyState');
+        const errorEl = document.getElementById('catalogError');
+
+        function escapeHtml(value = '') {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatNumber(value) {
+            return Number(value || 0).toLocaleString('es-ES');
+        }
+
+        function stars(score) {
+            const filled = Math.max(1, Math.min(5, Math.round((Number(score || 0) / 100) * 5)));
+            return '★'.repeat(filled) + '☆'.repeat(5 - filled);
+        }
+
+        function cardTemplate(item) {
+            const hasDiscount = Number(item.descuento || 0) > 0;
+            return `
+                <a class="deal-card" href="/game/${encodeURIComponent(item.slug)}">
+                    <div class="card-media">
+                        <img src="${escapeHtml(item.imagen_url || '')}" alt="${escapeHtml(item.juego)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">
+                        <div class="image-fallback" style="display:${item.imagen_url ? 'none' : 'grid'};">NO SIGNAL</div>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-top">
+                            <div>
+                                <h3 class="card-title">${escapeHtml(item.juego)}</h3>
+                                <div class="card-dev">${escapeHtml(item.desarrollador || 'Desconocido')}</div>
+                            </div>
+                            <span class="discount">${hasDiscount ? `-${item.descuento}%` : '0%'}</span>
+                        </div>
+                        <div class="tag-row">
+                            <span class="badge genre">${escapeHtml(item.genero || 'Action')}</span>
+                            <span class="badge score">${Number(item.reputacion_score || 0).toFixed(1)}%</span>
+                        </div>
+                        <div class="reputation-row">
+                            <span class="stars">${stars(item.reputacion_score)}</span>
+                            <span>${formatNumber(item.reputacion_reviews)} reviews</span>
+                        </div>
+                        <div class="price-row">
+                            <div>
+                                ${hasDiscount ? `<div class="old-price">${escapeHtml(item.precio_original)}</div>` : '<div class="old-price" style="text-decoration:none;color:rgba(226,232,240,.5);">Precio actual</div>'}
+                                <div class="price-value">${escapeHtml(item.precio_oferta)}</div>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            `;
+        }
+
+        function fetchJson(url) {
+            return fetch(url).then(response => {
+                if (!response.ok) {
+                    throw new Error(`Request failed: ${response.status}`);
+                }
+                return response.json();
+            });
+        }
+
+        function renderGenreChips() {
+            const chips = ['all', ...state.genres]
+                .map(genre => `
+                    <button class="chip ${state.genre === genre ? 'active' : ''}" data-genre="${escapeHtml(genre)}">
+                        ${genre === 'all' ? 'Todos los géneros' : escapeHtml(genre)}
+                    </button>
+                `)
+                .join('');
+
+            document.getElementById('genreChips').innerHTML = chips;
+            document.querySelectorAll('.chip').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    state.genre = chip.dataset.genre;
+                    renderGenreChips();
+                    renderCatalog();
+                });
+            });
+        }
+
+        function sortDeals(items) {
+            const sorted = [...items];
+            switch (state.sort) {
+                case 'rating':
+                    return sorted.sort((a, b) => Number(b.reputacion_score || 0) - Number(a.reputacion_score || 0));
+                case 'price-asc':
+                    return sorted.sort((a, b) => Number(a.precio_oferta_valor || 0) - Number(b.precio_oferta_valor || 0));
+                case 'price-desc':
+                    return sorted.sort((a, b) => Number(b.precio_oferta_valor || 0) - Number(a.precio_oferta_valor || 0));
+                case 'name':
+                    return sorted.sort((a, b) => String(a.juego || '').localeCompare(String(b.juego || ''), 'es'));
+                case 'discount':
+                default:
+                    return sorted.sort((a, b) => Number(b.descuento || 0) - Number(a.descuento || 0));
+            }
+        }
+
+        function renderCatalog() {
+            const term = state.search.trim().toLowerCase();
+            const filtered = state.deals.filter(item => {
+                const matchesSearch = !term || `${item.juego} ${item.desarrollador}`.toLowerCase().includes(term);
+                const matchesGenre = state.genre === 'all' || item.genero === state.genre;
+                return matchesSearch && matchesGenre;
+            });
+
+            const sorted = sortDeals(filtered);
+            document.getElementById('counter').textContent = `${formatNumber(sorted.length)} juegos encontrados`;
+            emptyState.hidden = sorted.length > 0;
+            grid.innerHTML = sorted.map(cardTemplate).join('');
+            if (!sorted.length) {
+                grid.innerHTML = '';
+            }
+        }
+
+        async function initCatalog() {
+            grid.innerHTML = '<div class="status-note">Cargando catálogo...</div>';
+            errorEl.hidden = true;
+
+            try {
+                const [deals, games] = await Promise.all([
+                    fetchJson('/api/deals'),
+                    fetchJson('/api/games'),
+                ]);
+
+                state.deals = deals;
+                state.genres = [...new Set(games.map(game => game.genero).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+                renderGenreChips();
+                renderCatalog();
+            } catch (error) {
+                console.error(error);
+                grid.innerHTML = '';
+                emptyState.hidden = false;
+                errorEl.hidden = false;
+                errorEl.textContent = 'No se pudo cargar el catálogo. Revisa la API y vuelve a intentarlo.';
+            }
+        }
+
+        document.getElementById('searchInput').addEventListener('input', event => {
+            state.search = event.target.value;
+            renderCatalog();
+        });
+
+        document.getElementById('sortSelect').addEventListener('change', event => {
+            state.sort = event.target.value;
+            renderCatalog();
+        });
+
+        document.addEventListener('DOMContentLoaded', initCatalog);
+    </script>
+</body>
+</html>

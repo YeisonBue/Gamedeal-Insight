@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GAMEDEAL.IO | Game Detail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@500;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #080c14;
+            --surface: #0d1424;
+            --card: #111827;
+            --border: #1e3253;
+            --cyan: #00d4ff;
+            --purple: #8b5cf6;
+            --green: #10b981;
+            --red: #ef4444;
+            --gold: #f59e0b;
+            --text: #e2e8f0;
+            --muted: #6b7280;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Inter', system-ui, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top, rgba(0, 212, 255, 0.12), transparent 30%),
+                radial-gradient(circle at right, rgba(139, 92, 246, 0.12), transparent 28%),
+                var(--bg);
+        }
+
+        body::before,
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        body::before {
+            background-image:
+                linear-gradient(rgba(0, 212, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(139, 92, 246, 0.05) 1px, transparent 1px);
+            background-size: 66px 66px;
+            mask-image: linear-gradient(to bottom, rgba(255,255,255,0.9), transparent 90%);
+        }
+
+        body::after {
+            background: repeating-linear-gradient(180deg, rgba(255,255,255,0.03) 0, rgba(255,255,255,0.03) 2px, transparent 2px, transparent 5px);
+            opacity: 0.1;
+        }
+
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 40;
+            backdrop-filter: blur(18px);
+            background: rgba(8, 12, 20, 0.82);
+            border-bottom: 1px solid rgba(30, 50, 83, 0.85);
+        }
+
+        .nav-inner,
+        .page-shell,
+        .footer-inner {
+            width: min(1240px, calc(100% - 32px));
+            margin: 0 auto;
+        }
+
+        .nav-inner {
+            min-height: 76px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 0.18em;
+            font-weight: 800;
+            color: var(--cyan);
+            text-decoration: none;
+            text-shadow: 0 0 16px rgba(0, 212, 255, 0.4);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 18px;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: var(--text);
+            text-decoration: none;
+            font-weight: 600;
+            opacity: 0.82;
+        }
+
+        .nav-links a:hover,
+        .nav-links a.active {
+            color: var(--cyan);
+            opacity: 1;
+        }
+
+        .page-shell {
+            padding: 108px 0 64px;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 18px;
+            color: var(--cyan);
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .detail-hero,
+        .panel,
+        .footer-card,
+        .error-banner {
+            border: 1px solid var(--border);
+            background: rgba(13, 20, 36, 0.88);
+            backdrop-filter: blur(12px);
+        }
+
+        .detail-hero {
+            --hero-image: none;
+            position: relative;
+            overflow: hidden;
+            border-radius: 28px;
+            padding: 28px;
+            display: grid;
+            grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+            gap: 24px;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.34);
+        }
+
+        .detail-hero::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(8, 12, 20, 0.95), rgba(8, 12, 20, 0.72)), var(--hero-image) center/cover;
+            opacity: 0.55;
+        }
+
+        .detail-hero > * { position: relative; z-index: 1; }
+
+        .detail-media {
+            position: relative;
+            border-radius: 24px;
+            overflow: hidden;
+            border: 1px solid rgba(30, 50, 83, 0.9);
+            min-height: 260px;
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(139, 92, 246, 0.15));
+        }
+
+        .detail-media img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .image-fallback {
+            position: absolute;
+            inset: 0;
+            display: none;
+            place-items: center;
+            background: linear-gradient(135deg, rgba(17,24,39,.96), rgba(13,20,36,.92));
+            color: rgba(226,232,240,.72);
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 0.18em;
+            font-size: 0.82rem;
+        }
+
+        .chip,
+        .price-badge,
+        .metric-value,
+        h1,
+        h2 {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .chip {
+            display: inline-flex;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: rgba(139, 92, 246, 0.16);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            color: #d7c7ff;
+            font-size: 0.78rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            margin: 14px 0 10px;
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            line-height: 1.05;
+        }
+
+        .subtitle {
+            margin: 0 0 18px;
+            color: rgba(226, 232, 240, 0.76);
+            line-height: 1.7;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 22px;
+        }
+
+        .info-item {
+            padding: 14px;
+            border-radius: 18px;
+            background: rgba(17, 24, 39, 0.7);
+            border: 1px solid rgba(30, 50, 83, 0.85);
+        }
+
+        .info-item span {
+            display: block;
+            color: var(--muted);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            margin-bottom: 6px;
+        }
+
+        .price-box {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 18px;
+            border-radius: 22px;
+            background: linear-gradient(135deg, rgba(17, 24, 39, 0.92), rgba(13, 20, 36, 0.94));
+            border: 1px solid rgba(0, 212, 255, 0.22);
+            box-shadow: 0 0 26px rgba(0, 212, 255, 0.08);
+        }
+
+        .price-stack { display: grid; gap: 6px; }
+        .old-price { color: rgba(239, 68, 68, 0.92); text-decoration: line-through; }
+        .current-price { font-size: clamp(1.5rem, 4vw, 2.4rem); font-weight: 800; }
+
+        .price-badge {
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: rgba(16, 185, 129, 0.18);
+            color: #7df6ca;
+            border: 1px solid rgba(16, 185, 129, 0.45);
+            box-shadow: 0 0 18px rgba(16, 185, 129, 0.15);
+        }
+
+        .steam-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            margin-top: 18px;
+            padding: 14px 18px;
+            border-radius: 18px;
+            background: linear-gradient(90deg, rgba(0, 212, 255, 0.2), rgba(139, 92, 246, 0.2));
+            color: var(--text);
+            text-decoration: none;
+            font-weight: 800;
+            border: 1px solid rgba(0, 212, 255, 0.28);
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+            margin-top: 22px;
+        }
+
+        .panel {
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 0 26px 56px rgba(0, 0, 0, 0.24);
+        }
+
+        h2 { margin: 0 0 18px; font-size: 1.25rem; }
+        .metric-value { font-size: clamp(2rem, 4vw, 3rem); margin-bottom: 8px; }
+        .muted { color: rgba(226, 232, 240, 0.72); }
+
+        .progress {
+            margin-top: 16px;
+            width: 100%;
+            height: 14px;
+            border-radius: 999px;
+            background: rgba(17, 24, 39, 0.92);
+            border: 1px solid rgba(30, 50, 83, 0.95);
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0;
+            background: linear-gradient(90deg, var(--cyan), var(--purple));
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+            transition: width 0.35s ease;
+        }
+
+        .chart-panel { margin-top: 22px; }
+        .chart-wrap { height: min(420px, 58vh); }
+        .empty-state,
+        .loading-state,
+        .error-banner {
+            padding: 18px;
+            border-radius: 18px;
+            text-align: center;
+        }
+        .empty-state,
+        .loading-state {
+            border: 1px dashed rgba(107, 114, 128, 0.35);
+            color: rgba(226, 232, 240, 0.76);
+            background: rgba(13, 20, 36, 0.9);
+        }
+        .error-banner {
+            background: rgba(239, 68, 68, 0.12);
+            color: #fecaca;
+        }
+
+        footer { padding-bottom: 32px; }
+        .footer-card { border-radius: 24px; padding: 22px; }
+        .footer-inner {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            color: rgba(226, 232, 240, 0.72);
+        }
+        .footer-links { display: flex; gap: 16px; flex-wrap: wrap; }
+        .footer-links a { color: var(--text); text-decoration: none; }
+
+        @media (max-width: 920px) {
+            .detail-hero,
+            .detail-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 720px) {
+            .nav-inner {
+                min-height: 88px;
+                padding: 14px 0;
+                align-items: flex-start;
+                justify-content: center;
+                flex-direction: column;
+            }
+
+            .page-shell { padding-top: 122px; }
+            .detail-hero,
+            .panel { padding: 22px; }
+            .info-grid { grid-template-columns: 1fr; }
+            .footer-inner { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-inner">
+            <a class="logo" href="/dashboard">GAMEDEAL.IO</a>
+            <div class="nav-links">
+                <a href="/dashboard">Dashboard</a>
+                <a href="/catalog" class="active">Catálogo</a>
+                <a href="https://github.com/YeisonBue/Gamedeal-Insight" target="_blank" rel="noreferrer">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="page-shell">
+        <a href="/catalog" class="back-link">← Volver al catálogo</a>
+        <div id="errorState" class="error-banner" hidden></div>
+
+        <section id="detailHero" class="detail-hero">
+            <div class="detail-media">
+                <img id="gameImage" alt="Portada del juego" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">
+                <div id="imageFallback" class="image-fallback">NO SIGNAL</div>
+            </div>
+            <div>
+                <span id="genreChip" class="chip">Loading</span>
+                <h1 id="gameTitle">Cargando juego...</h1>
+                <p id="subtitle" class="subtitle">Estamos reuniendo la información de precio y reputación de este título.</p>
+
+                <div class="info-grid">
+                    <div class="info-item"><span>Desarrollador</span><strong id="developerValue">--</strong></div>
+                    <div class="info-item"><span>Publisher</span><strong id="publisherValue">--</strong></div>
+                    <div class="info-item"><span>Steam App ID</span><strong id="appIdValue">--</strong></div>
+                    <div class="info-item"><span>Plataforma</span><strong id="platformValue">PC</strong></div>
+                </div>
+
+                <div class="price-box">
+                    <div class="price-stack">
+                        <div id="oldPrice" class="old-price">--</div>
+                        <div id="currentPrice" class="current-price">--</div>
+                    </div>
+                    <div id="discountBadge" class="price-badge">0% OFF</div>
+                </div>
+
+                <a id="steamLink" class="steam-btn" href="#" target="_blank" rel="noreferrer">Ver en Steam</a>
+            </div>
+        </section>
+
+        <section class="detail-grid">
+            <article class="panel">
+                <h2>Reputación de la comunidad</h2>
+                <div id="scoreValue" class="metric-value">0%</div>
+                <div id="reviewsValue" class="muted">0 reseñas analizadas</div>
+                <div class="progress"><div id="scoreBar" class="progress-bar"></div></div>
+            </article>
+            <article class="panel">
+                <h2>Snapshot actual</h2>
+                <div class="info-grid" style="margin:0;">
+                    <div class="info-item"><span>Precio actual</span><strong id="snapshotCurrent">--</strong></div>
+                    <div class="info-item"><span>Precio base</span><strong id="snapshotBase">--</strong></div>
+                    <div class="info-item"><span>Descuento</span><strong id="snapshotDiscount">--</strong></div>
+                    <div class="info-item"><span>Última captura</span><strong id="snapshotDate">--</strong></div>
+                </div>
+            </article>
+        </section>
+
+        <section class="panel chart-panel">
+            <h2>Historial de precios</h2>
+            <div class="chart-wrap">
+                <canvas id="priceChart"></canvas>
+            </div>
+            <div id="historyEmpty" class="empty-state" hidden>No hay historial suficiente para graficar este título.</div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="page-shell" style="padding-top:0; padding-bottom:0;">
+            <div class="footer-card">
+                <div class="footer-inner">
+                    <div>© 2026 GAMEDEAL.IO · Vista individual con reputación y precio histórico.</div>
+                    <div class="footer-links">
+                        <a href="/dashboard">Dashboard</a>
+                        <a href="/catalog">Catálogo</a>
+                        <a href="https://github.com/YeisonBue/Gamedeal-Insight" target="_blank" rel="noreferrer">Repositorio</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const slug = window.location.pathname.split('/').pop();
+        let priceChart;
+
+        function formatDate(value) {
+            if (!value) return '--';
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? value : date.toLocaleString('es-ES');
+        }
+
+        function formatNumber(value) {
+            return Number(value || 0).toLocaleString('es-ES');
+        }
+
+        function showError(message) {
+            const error = document.getElementById('errorState');
+            error.hidden = false;
+            error.textContent = message;
+        }
+
+        function renderChart(history) {
+            const canvas = document.getElementById('priceChart');
+            const empty = document.getElementById('historyEmpty');
+
+            if (!history.length) {
+                empty.hidden = false;
+                canvas.style.display = 'none';
+                return;
+            }
+
+            empty.hidden = true;
+            canvas.style.display = 'block';
+
+            if (priceChart) {
+                priceChart.destroy();
+            }
+
+            priceChart = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: history.map(point => point.fecha),
+                    datasets: [{
+                        label: 'Precio actual',
+                        data: history.map(point => point.precio),
+                        borderColor: '#00d4ff',
+                        backgroundColor: 'rgba(0, 212, 255, 0.15)',
+                        tension: 0.32,
+                        fill: true,
+                        pointRadius: 3,
+                    }],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#e2e8f0' } },
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: 'rgba(30, 50, 83, 0.45)' },
+                        },
+                        y: {
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: 'rgba(30, 50, 83, 0.45)' },
+                        },
+                    },
+                },
+            });
+        }
+
+        async function loadGame() {
+            try {
+                const response = await fetch(`/api/game/${encodeURIComponent(slug)}/data`);
+                if (!response.ok) {
+                    throw new Error(`Request failed: ${response.status}`);
+                }
+
+                const payload = await response.json();
+                const { game, latest_price: latestPrice, latest_rep: latestRep, price_history: priceHistory } = payload;
+                const appId = game.steam_app_id || '';
+                const capsule = appId ? `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg` : game.imagen_url;
+
+                document.title = `GAMEDEAL.IO | ${game.nombre}`;
+                document.getElementById('genreChip').textContent = game.genero || 'Action';
+                document.getElementById('gameTitle').textContent = game.nombre || 'Juego sin nombre';
+                document.getElementById('subtitle').textContent = `${game.desarrollador || 'Desarrollador desconocido'} · ${game.publisher || 'Publisher desconocido'} · ${game.plataforma || 'PC'}`;
+                document.getElementById('developerValue').textContent = game.desarrollador || '--';
+                document.getElementById('publisherValue').textContent = game.publisher || '--';
+                document.getElementById('appIdValue').textContent = appId || '--';
+                document.getElementById('platformValue').textContent = game.plataforma || 'PC';
+
+                const gameImage = document.getElementById('gameImage');
+                if (capsule) {
+                    gameImage.src = capsule;
+                    document.getElementById('detailHero').style.setProperty('--hero-image', `url(${capsule})`);
+                } else {
+                    gameImage.style.display = 'none';
+                    document.getElementById('imageFallback').style.display = 'grid';
+                }
+
+                document.getElementById('oldPrice').textContent = latestPrice?.precio_base_formateado || '--';
+                document.getElementById('currentPrice').textContent = latestPrice?.precio_actual_formateado || '--';
+                document.getElementById('discountBadge').textContent = `${Math.round(Number(latestPrice?.descuento_porcentaje || 0))}% OFF`;
+                document.getElementById('steamLink').href = appId ? `https://store.steampowered.com/app/${appId}` : '#';
+                document.getElementById('steamLink').style.pointerEvents = appId ? 'auto' : 'none';
+                document.getElementById('steamLink').style.opacity = appId ? '1' : '0.5';
+
+                const score = Number(latestRep?.score_promedio || 0);
+                document.getElementById('scoreValue').textContent = `${score.toFixed(1)}%`;
+                document.getElementById('reviewsValue').textContent = `${formatNumber(latestRep?.cantidad_reseñas)} reseñas analizadas`;
+                document.getElementById('scoreBar').style.width = `${Math.max(0, Math.min(score, 100))}%`;
+
+                document.getElementById('snapshotCurrent').textContent = latestPrice?.precio_actual_formateado || '--';
+                document.getElementById('snapshotBase').textContent = latestPrice?.precio_base_formateado || '--';
+                document.getElementById('snapshotDiscount').textContent = `${Math.round(Number(latestPrice?.descuento_porcentaje || 0))}%`;
+                document.getElementById('snapshotDate').textContent = formatDate(latestPrice?.fecha_captura);
+
+                renderChart(priceHistory || []);
+            } catch (error) {
+                console.error(error);
+                showError('No se pudo cargar el detalle del juego. Verifica el slug o el estado de la API.');
+                document.getElementById('gameTitle').textContent = 'Error al cargar el juego';
+                document.getElementById('subtitle').textContent = 'No fue posible recuperar la información solicitada.';
+                document.getElementById('historyEmpty').hidden = false;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadGame);
+    </script>
+</body>
+</html>

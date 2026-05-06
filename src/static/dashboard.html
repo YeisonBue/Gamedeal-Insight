@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GAMEDEAL.IO | Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@500;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #080c14;
+            --surface: #0d1424;
+            --card: #111827;
+            --border: #1e3253;
+            --cyan: #00d4ff;
+            --purple: #8b5cf6;
+            --green: #10b981;
+            --red: #ef4444;
+            --gold: #f59e0b;
+            --text: #e2e8f0;
+            --muted: #6b7280;
+        }
+
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Inter', system-ui, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top, rgba(0, 212, 255, 0.12), transparent 32%),
+                radial-gradient(circle at right, rgba(139, 92, 246, 0.12), transparent 28%),
+                var(--bg);
+            overflow-x: hidden;
+        }
+
+        body::before,
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        body::before {
+            background-image:
+                linear-gradient(rgba(0, 212, 255, 0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(139, 92, 246, 0.06) 1px, transparent 1px);
+            background-size: 64px 64px;
+            mask-image: linear-gradient(to bottom, rgba(255,255,255,0.95), transparent 85%);
+            animation: gridShift 20s linear infinite;
+        }
+
+        body::after {
+            background: repeating-linear-gradient(
+                180deg,
+                rgba(255, 255, 255, 0.035) 0,
+                rgba(255, 255, 255, 0.035) 2px,
+                transparent 2px,
+                transparent 5px
+            );
+            opacity: 0.12;
+            animation: scanlines 10s linear infinite;
+        }
+
+        @keyframes gridShift {
+            from { transform: translateY(0); }
+            to { transform: translateY(64px); }
+        }
+
+        @keyframes scanlines {
+            from { transform: translateY(-12px); }
+            to { transform: translateY(12px); }
+        }
+
+        @keyframes glowPulse {
+            0%, 100% { opacity: 0.55; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.06); }
+        }
+
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 50;
+            backdrop-filter: blur(18px);
+            background: rgba(8, 12, 20, 0.82);
+            border-bottom: 1px solid rgba(30, 50, 83, 0.85);
+        }
+
+        .nav-inner,
+        .page-shell,
+        .footer-inner {
+            width: min(1200px, calc(100% - 32px));
+            margin: 0 auto;
+        }
+
+        .nav-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 76px;
+        }
+
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 800;
+            font-size: 1.4rem;
+            letter-spacing: 0.18em;
+            color: var(--cyan);
+            text-decoration: none;
+            text-shadow: 0 0 18px rgba(0, 212, 255, 0.4);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 18px;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: var(--text);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.95rem;
+            opacity: 0.82;
+            transition: opacity 0.2s ease, color 0.2s ease;
+        }
+
+        .nav-links a:hover,
+        .nav-links a.active {
+            opacity: 1;
+            color: var(--cyan);
+        }
+
+        .page-shell {
+            padding: 108px 0 64px;
+        }
+
+        .hero {
+            position: relative;
+            padding: 32px;
+            border-radius: 28px;
+            border: 1px solid var(--border);
+            background: linear-gradient(145deg, rgba(17, 24, 39, 0.95), rgba(13, 20, 36, 0.92));
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.38);
+            overflow: hidden;
+        }
+
+        .hero::before,
+        .hero::after {
+            content: '';
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(14px);
+            animation: glowPulse 8s ease-in-out infinite;
+        }
+
+        .hero::before {
+            width: 220px;
+            height: 220px;
+            top: -80px;
+            right: -60px;
+            background: rgba(0, 212, 255, 0.18);
+        }
+
+        .hero::after {
+            width: 260px;
+            height: 260px;
+            bottom: -120px;
+            left: -100px;
+            background: rgba(139, 92, 246, 0.16);
+            animation-delay: -4s;
+        }
+
+        .hero-grid {
+            position: relative;
+            display: grid;
+            grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+            gap: 24px;
+            align-items: stretch;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: rgba(0, 212, 255, 0.12);
+            border: 1px solid rgba(0, 212, 255, 0.25);
+            color: var(--cyan);
+            font-size: 0.84rem;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+        }
+
+        h1,
+        h2,
+        h3,
+        .stat-value,
+        .section-title {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(2.3rem, 5vw, 4.2rem);
+            line-height: 1.02;
+            letter-spacing: -0.03em;
+        }
+
+        .hero-copy p {
+            max-width: 62ch;
+            color: rgba(226, 232, 240, 0.76);
+            font-size: 1rem;
+            line-height: 1.75;
+            margin: 18px 0 0;
+        }
+
+        .hero-panel,
+        .stat-card,
+        .deal-card,
+        .section-panel,
+        .banner,
+        .footer-card {
+            border: 1px solid var(--border);
+            background: rgba(17, 24, 39, 0.72);
+            backdrop-filter: blur(12px);
+        }
+
+        .hero-panel {
+            padding: 22px;
+            border-radius: 24px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 18px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        }
+
+        .panel-label {
+            color: var(--muted);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+        }
+
+        .focus-game {
+            display: grid;
+            gap: 10px;
+        }
+
+        .focus-game strong {
+            font-size: 1.2rem;
+        }
+
+        .focus-cta {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 16px;
+            border-radius: 14px;
+            background: linear-gradient(90deg, rgba(0, 212, 255, 0.2), rgba(139, 92, 246, 0.2));
+            color: var(--text);
+            text-decoration: none;
+            font-weight: 700;
+            border: 1px solid rgba(0, 212, 255, 0.25);
+        }
+
+        .stat-grid {
+            position: relative;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            margin-top: 24px;
+        }
+
+        .stat-card {
+            border-radius: 20px;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 16px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            inset: auto -20% -70% 45%;
+            height: 120px;
+            background: radial-gradient(circle, rgba(0, 212, 255, 0.18), transparent 60%);
+        }
+
+        .stat-label {
+            color: var(--muted);
+            font-size: 0.83rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: clamp(1.45rem, 3vw, 2.15rem);
+            color: white;
+        }
+
+        .stat-sub {
+            margin-top: 6px;
+            color: rgba(226, 232, 240, 0.72);
+            font-size: 0.92rem;
+        }
+
+        .section-panel {
+            margin-top: 28px;
+            padding: 24px;
+            border-radius: 28px;
+            box-shadow: 0 28px 60px rgba(0, 0, 0, 0.26);
+        }
+
+        .section-head {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .section-head p {
+            margin: 10px 0 0;
+            color: rgba(226, 232, 240, 0.72);
+            max-width: 58ch;
+        }
+
+        .section-title {
+            margin: 0;
+            font-size: clamp(1.3rem, 3vw, 1.9rem);
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 18px;
+        }
+
+        .deal-card {
+            text-decoration: none;
+            color: var(--text);
+            border-radius: 22px;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+            box-shadow: 0 20px 38px rgba(0, 0, 0, 0.22);
+        }
+
+        .deal-card:hover {
+            transform: scale(1.03);
+            border-color: rgba(0, 212, 255, 0.55);
+            box-shadow: 0 0 0 1px rgba(0, 212, 255, 0.12), 0 20px 40px rgba(0, 212, 255, 0.12), 0 18px 40px rgba(139, 92, 246, 0.16);
+        }
+
+        .card-media {
+            position: relative;
+            aspect-ratio: 16 / 9;
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.18), rgba(139, 92, 246, 0.18));
+            overflow: hidden;
+        }
+
+        .card-media img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .image-fallback {
+            position: absolute;
+            inset: 0;
+            display: none;
+            place-items: center;
+            background: linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(13, 20, 36, 0.92));
+            color: rgba(226, 232, 240, 0.7);
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 0.2em;
+            font-size: 0.82rem;
+        }
+
+        .card-body {
+            padding: 18px;
+            display: grid;
+            gap: 14px;
+        }
+
+        .card-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .card-title {
+            margin: 0;
+            font-size: 1.06rem;
+            line-height: 1.35;
+        }
+
+        .card-dev {
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        .discount-badge,
+        .genre-badge,
+        .score-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            padding: 8px 12px;
+            font-size: 0.78rem;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .discount-badge {
+            background: rgba(16, 185, 129, 0.18);
+            color: #7df6ca;
+            border: 1px solid rgba(16, 185, 129, 0.45);
+            box-shadow: 0 0 16px rgba(16, 185, 129, 0.16);
+        }
+
+        .genre-badge {
+            background: rgba(139, 92, 246, 0.16);
+            color: #d7c7ff;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+
+        .score-badge {
+            background: rgba(245, 158, 11, 0.15);
+            color: #ffd580;
+            border: 1px solid rgba(245, 158, 11, 0.28);
+        }
+
+        .card-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .reputation-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.92rem;
+        }
+
+        .stars {
+            color: var(--gold);
+            letter-spacing: 0.1em;
+            font-size: 0.88rem;
+        }
+
+        .price-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 14px;
+        }
+
+        .price-stack {
+            display: grid;
+            gap: 4px;
+        }
+
+        .old-price {
+            color: rgba(239, 68, 68, 0.9);
+            text-decoration: line-through;
+            font-size: 0.92rem;
+        }
+
+        .new-price {
+            font-size: 1.18rem;
+            font-weight: 800;
+            color: white;
+        }
+
+        .banner {
+            margin-top: 18px;
+            padding: 14px 16px;
+            border-radius: 16px;
+            color: #fecaca;
+            background: rgba(239, 68, 68, 0.12);
+        }
+
+        .status-note,
+        .empty-state {
+            padding: 18px;
+            border-radius: 18px;
+            color: rgba(226, 232, 240, 0.76);
+            background: rgba(13, 20, 36, 0.9);
+            border: 1px dashed rgba(107, 114, 128, 0.35);
+            text-align: center;
+        }
+
+        footer {
+            padding: 0 0 32px;
+        }
+
+        .footer-card {
+            border-radius: 24px;
+            padding: 22px;
+        }
+
+        .footer-inner {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            color: rgba(226, 232, 240, 0.72);
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: var(--text);
+            text-decoration: none;
+        }
+
+        @media (max-width: 960px) {
+            .hero-grid,
+            .stat-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 720px) {
+            .nav-inner {
+                min-height: 88px;
+                align-items: flex-start;
+                justify-content: center;
+                padding: 14px 0;
+                flex-direction: column;
+            }
+
+            .page-shell {
+                padding-top: 122px;
+            }
+
+            .hero,
+            .section-panel {
+                padding: 22px;
+            }
+
+            .hero-grid,
+            .stat-grid,
+            .card-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .section-head,
+            .footer-inner {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-inner">
+            <a class="logo" href="/dashboard">GAMEDEAL.IO</a>
+            <div class="nav-links">
+                <a href="/dashboard" class="active">Dashboard</a>
+                <a href="/catalog">Catálogo</a>
+                <a href="https://github.com/YeisonBue/Gamedeal-Insight" target="_blank" rel="noreferrer">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="page-shell">
+        <section class="hero">
+            <div class="hero-grid">
+                <div class="hero-copy">
+                    <span class="eyebrow">Steam market intelligence</span>
+                    <h1>Ofertas reales, reputación viva y una vista gamer de todo el catálogo.</h1>
+                    <p>
+                        GAMEDEAL.IO monitorea títulos de Steam, cruza precios con sentimiento de usuarios y los ordena
+                        para que descubras el mejor momento para jugar, coleccionar o comparar descuentos.
+                    </p>
+                </div>
+                <aside class="hero-panel">
+                    <div>
+                        <div class="panel-label">Focus deal</div>
+                        <div id="hero-focus" class="focus-game">
+                            <strong>Sincronizando feed</strong>
+                            <span>Estamos cargando el mejor descuento disponible ahora mismo.</span>
+                        </div>
+                    </div>
+                    <a class="focus-cta" href="/catalog">Explorar catálogo completo</a>
+                </aside>
+            </div>
+
+            <div class="stat-grid">
+                <article class="stat-card">
+                    <div class="stat-label">Total juegos</div>
+                    <div class="stat-value" id="stat-total">--</div>
+                    <div class="stat-sub">Monitoreados en Steam</div>
+                </article>
+                <article class="stat-card">
+                    <div class="stat-label">En oferta</div>
+                    <div class="stat-value" id="stat-sale">--</div>
+                    <div class="stat-sub">Descuentos activos</div>
+                </article>
+                <article class="stat-card">
+                    <div class="stat-label">Mejor descuento</div>
+                    <div class="stat-value" id="stat-discount">--</div>
+                    <div class="stat-sub">Top oportunidad del momento</div>
+                </article>
+                <article class="stat-card">
+                    <div class="stat-label">Promedio reputación</div>
+                    <div class="stat-value" id="stat-reputation">--</div>
+                    <div class="stat-sub">Feedback reciente de la comunidad</div>
+                </article>
+            </div>
+
+            <div id="dashboard-error" class="banner" hidden></div>
+        </section>
+
+        <section class="section-panel">
+            <div class="section-head">
+                <div>
+                    <h2 class="section-title">🔥 HOT DEALS</h2>
+                    <p>Los descuentos más agresivos del catálogo con precios y reputación en una sola vista.</p>
+                </div>
+            </div>
+            <div id="hot-deals" class="card-grid"></div>
+        </section>
+
+        <section class="section-panel">
+            <div class="section-head">
+                <div>
+                    <h2 class="section-title">⭐ TOP RATED</h2>
+                    <p>Los favoritos de la comunidad: mejor score de reseñas y presencia en el radar del mercado.</p>
+                </div>
+            </div>
+            <div id="top-rated" class="card-grid"></div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="page-shell" style="padding-top: 0; padding-bottom: 0;">
+            <div class="footer-card">
+                <div class="footer-inner">
+                    <div>© 2026 GAMEDEAL.IO · Steam price intelligence for gamers.</div>
+                    <div class="footer-links">
+                        <a href="/dashboard">Dashboard</a>
+                        <a href="/catalog">Catálogo</a>
+                        <a href="https://github.com/YeisonBue/Gamedeal-Insight" target="_blank" rel="noreferrer">Repositorio</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const hotDealsEl = document.getElementById('hot-deals');
+        const topRatedEl = document.getElementById('top-rated');
+        const errorEl = document.getElementById('dashboard-error');
+
+        function escapeHtml(value = '') {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatNumber(value) {
+            return Number(value || 0).toLocaleString('es-ES');
+        }
+
+        function getStars(score) {
+            const filled = Math.max(1, Math.min(5, Math.round((Number(score || 0) / 100) * 5)));
+            return '★'.repeat(filled) + '☆'.repeat(5 - filled);
+        }
+
+        function cardTemplate(item) {
+            const hasDiscount = Number(item.descuento || 0) > 0;
+            const discountLabel = hasDiscount ? `-${item.descuento}%` : 'Precio estable';
+            return `
+                <a class="deal-card" href="/game/${encodeURIComponent(item.slug)}">
+                    <div class="card-media">
+                        <img src="${escapeHtml(item.imagen_url || '')}" alt="${escapeHtml(item.juego)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">
+                        <div class="image-fallback" style="display:${item.imagen_url ? 'none' : 'grid'};">NO SIGNAL</div>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-top">
+                            <div>
+                                <h3 class="card-title">${escapeHtml(item.juego)}</h3>
+                                <div class="card-dev">${escapeHtml(item.desarrollador || 'Desconocido')}</div>
+                            </div>
+                            <span class="discount-badge">${discountLabel}</span>
+                        </div>
+
+                        <div class="card-meta">
+                            <span class="genre-badge">${escapeHtml(item.genero || 'Action')}</span>
+                            <span class="score-badge">${Number(item.reputacion_score || 0).toFixed(1)}%</span>
+                        </div>
+
+                        <div class="reputation-row">
+                            <span class="stars">${getStars(item.reputacion_score)}</span>
+                            <span>${formatNumber(item.reputacion_reviews)} reviews</span>
+                        </div>
+
+                        <div class="price-row">
+                            <div class="price-stack">
+                                ${hasDiscount ? `<span class="old-price">${escapeHtml(item.precio_original)}</span>` : '<span class="old-price" style="text-decoration:none;color:rgba(226,232,240,.5);">Precio actual</span>'}
+                                <span class="new-price">${escapeHtml(item.precio_oferta)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            `;
+        }
+
+        function fillCards(container, items, emptyText) {
+            if (!items.length) {
+                container.innerHTML = `<div class="empty-state">${emptyText}</div>`;
+                return;
+            }
+            container.innerHTML = items.map(cardTemplate).join('');
+        }
+
+        function updateStats(stats) {
+            document.getElementById('stat-total').textContent = formatNumber(stats.total_games);
+            document.getElementById('stat-sale').textContent = formatNumber(stats.games_on_sale);
+            document.getElementById('stat-discount').textContent = stats.best_discount ? `-${stats.best_discount.descuento}%` : '0%';
+            document.getElementById('stat-reputation').textContent = `${Number(stats.avg_reputation || 0).toFixed(1)}%`;
+
+            const focus = document.getElementById('hero-focus');
+            if (!stats.best_discount) {
+                focus.innerHTML = '<strong>Sin descuentos destacados</strong><span>El feed está activo, pero ahora no hay rebajas mayores que mostrar.</span>';
+                return;
+            }
+
+            focus.innerHTML = `
+                <strong>${escapeHtml(stats.best_discount.juego)}</strong>
+                <span>${escapeHtml(stats.best_discount.desarrollador || 'Steam')}</span>
+                <span>${escapeHtml(stats.best_discount.precio_oferta)} · ${Number(stats.best_discount.reputacion_score || 0).toFixed(1)}% score</span>
+            `;
+        }
+
+        async function fetchJson(url) {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Request failed: ${response.status}`);
+            }
+            return response.json();
+        }
+
+        async function loadDashboard() {
+            hotDealsEl.innerHTML = '<div class="status-note">Cargando deals calientes...</div>';
+            topRatedEl.innerHTML = '<div class="status-note">Cargando top rated...</div>';
+            errorEl.hidden = true;
+
+            try {
+                const [stats, deals] = await Promise.all([
+                    fetchJson('/api/stats'),
+                    fetchJson('/api/deals'),
+                ]);
+
+                updateStats(stats);
+                fillCards(hotDealsEl, [...deals].sort((a, b) => Number(b.descuento || 0) - Number(a.descuento || 0)).slice(0, 8), 'No hay descuentos activos todavía.');
+                fillCards(topRatedEl, [...deals].sort((a, b) => Number(b.reputacion_score || 0) - Number(a.reputacion_score || 0)).slice(0, 8), 'Aún no hay datos de reputación disponibles.');
+            } catch (error) {
+                console.error(error);
+                errorEl.hidden = false;
+                errorEl.textContent = 'No se pudo cargar el dashboard. Verifica la API o intenta de nuevo en unos minutos.';
+                fillCards(hotDealsEl, [], 'No fue posible cargar las ofertas.');
+                fillCards(topRatedEl, [], 'No fue posible cargar el ranking.');
+                document.getElementById('hero-focus').innerHTML = '<strong>Error de sincronización</strong><span>La API no respondió correctamente.</span>';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDashboard();
+            setInterval(loadDashboard, 300000);
+        });
+    </script>
+</body>
+</html>

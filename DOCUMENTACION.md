@@ -1,195 +1,323 @@
-# 🎮 GameDeal Insight — Documentación Técnica
+# 🎮 GameDeal Insight — Documentación Técnica v2.0
 
-## ¿Qué es este proyecto?
+## Resumen
 
-**GameDeal Insight** es una plataforma de inteligencia de mercado para videojuegos. Recolecta automáticamente precios y reseñas de Steam, los almacena en una base de datos PostgreSQL y los presenta en un dashboard web en tiempo real.
+**GameDeal Insight** evolucionó a una experiencia multi-página con estética gaming, catálogo ampliado y una API REST más rica. El sistema ahora:
+
+- Monitorea **120+ juegos reales de Steam** (122 App IDs en `TARGET_APP_IDS`)
+- Guarda metadatos extra (`steam_app_id`, `imagen_url`) para enlazar y mostrar assets oficiales de Steam CDN
+- Expone páginas dedicadas para dashboard, catálogo y detalle individual
+- Inicia el scheduler automáticamente cuando FastAPI arranca
 
 ---
 
-## 🏗️ Arquitectura General
+## 🏗️ Arquitectura actual
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    FLUJO DEL SISTEMA                    │
-│                                                         │
-│  [Steam API] ──► [SteamCollector] ──► [PostgreSQL DB]  │
-│  [ITAD API]  ──► [ITADCollector]  ──►    (Docker)      │
-│                        │                    │           │
-│              [scheduler.py]        [FastAPI Server]     │
-│            (cada 1 minuto)               │              │
-│                                   [Dashboard HTML]      │
-│                               http://localhost:8000     │
-└─────────────────────────────────────────────────────────┘
+```text
+[Steam App Details API] ----┐
+[Steam Reviews API] --------┼--> [src/collectors/steam_collector.py] --> [PostgreSQL]
+                            │
+                            └--> [src/scheduler.py] (cada 6 horas + arranque inmediato)
+
+[FastAPI src/main.py]
+    ├── Páginas HTML estáticas gamer
+    │   ├── /dashboard
+    │   ├── /catalog
+    │   └── /game/{slug}
+    └── API JSON
+        ├── /api/deals
+        ├── /api/stats
+        ├── /api/games
+        └── /api/game/{slug}/data
 ```
 
-### Componentes principales
+### Archivos clave
 
 | Archivo | Rol |
 |---|---|
-| `src/main.py` | Servidor web FastAPI con los endpoints REST |
-| `src/scheduler.py` | Proceso independiente que recolecta datos periódicamente |
-| `src/collectors/steam_collector.py` | Llama a la API de Steam para precios y reseñas |
-| `src/collectors/itad_collector.py` | Conector con IsThereAnyDeal (actualmente con datos de prueba) |
-| `src/models/models.py` | Definición de tablas: `games`, `price_snapshots`, `reputation_snapshots` |
-| `src/db/database.py` | Conexión a PostgreSQL via SQLAlchemy |
-| `src/db/init_db.py` | Script que crea las tablas en la base de datos |
-| `src/static/index.html` | Dashboard frontend (HTML + JS puro) |
-| `limpiar_db.py` | Utilidad para eliminar datos de prueba |
+| `src/models/models.py` | Modelos SQLAlchemy con columnas nuevas para Steam (`steam_app_id`, `imagen_url`) |
+| `src/db/init_db.py` | Crea tablas y ejecuta migración ligera de columnas faltantes |
+| `src/collectors/steam_collector.py` | Recolector principal con 120+ App IDs, precio, reputación, género e imágenes |
+| `src/scheduler.py` | Programación cada 6 horas y ejecución inmediata al iniciar |
+| `src/main.py` | FastAPI + lifespan para autoarranque del scheduler |
+| `src/static/dashboard.html` | Home visual con hero, métricas y rankings |
+| `src/static/catalog.html` | Catálogo completo con búsqueda, filtros y ordenamiento |
+| `src/static/game.html` | Vista individual del juego con Chart.js |
+| `DOCUMENTACION.md` | Esta documentación |
 
 ---
 
-## 🗄️ Modelo de Datos
+## 🗄️ Modelo de datos
 
+### `games`
+
+```text
+id (PK)
+nombre
+slug (único)
+genero
+desarrollador
+publisher
+fecha_lanzamiento
+plataforma
+steam_app_id   <- NUEVO
+imagen_url     <- NUEVO
 ```
-games
-├── id (PK)
-├── nombre
-├── slug (único)
-├── genero
-├── desarrollador
-├── publisher
-├── fecha_lanzamiento
-└── plataforma
 
-price_snapshots
-├── id (PK)
-├── game_id (FK → games.id)
-├── source_id (1 = Steam)
-├── precio_actual
-├── precio_base
-├── descuento_porcentaje
-├── moneda
-└── fecha_captura
+### `price_snapshots`
 
-reputation_snapshots
-├── id (PK)
-├── game_id (FK → games.id)
-├── source_id (1 = Steam)
-├── score_promedio  (% reseñas positivas)
-├── cantidad_reseñas
-├── score_tipo
-└── fecha_captura
+```text
+id (PK)
+game_id (FK)
+source_id
+precio_actual
+precio_base
+descuento_porcentaje
+moneda
+fecha_captura
+```
+
+> `fecha_captura` ahora usa `datetime.datetime.now(datetime.timezone.utc)` para evitar el uso obsoleto de `utcnow`.
+
+### `reputation_snapshots`
+
+```text
+id (PK)
+game_id (FK)
+source_id
+score_promedio
+cantidad_reseñas
+score_tipo
+fecha_captura
 ```
 
 ---
 
-## 🔄 Flujo Detallado del Sistema
+## 🔄 Inicialización y migración ligera
 
-### 1. Recolección de datos (`scheduler.py` + `steam_collector.py`)
+`src/db/init_db.py` hace dos cosas:
 
+1. `Base.metadata.create_all(bind=engine)`
+2. `_migrate_columns()` para agregar `steam_app_id` e `imagen_url` si la tabla `games` ya existía sin esas columnas
+
+Esto evita tener que borrar la base para adoptar el rediseño del modelo.
+
+---
+
+## 🎯 Recolección de Steam
+
+El recolector usa dos endpoints oficiales:
+
+- `https://store.steampowered.com/api/appdetails`
+- `https://store.steampowered.com/appreviews/{app_id}`
+
+### Qué guarda por juego
+
+- Nombre del juego
+- Slug para navegación `/game/{slug}`
+- Género principal desde `genres[0].description`
+- Desarrollador y publisher
+- `steam_app_id`
+- `imagen_url` (`https://cdn.akamai.steamstatic.com/steam/apps/{app_id}/header.jpg`)
+- Snapshot de precio actual/base/descuento
+- Snapshot de reputación (% positivas y volumen de reseñas)
+
+### Catálogo monitorizado
+
+`TARGET_APP_IDS` contiene **122 App IDs** repartidos entre:
+
+- Souls / Action RPG
+- Cyberpunk / Sci-Fi RPG
+- CRPG / RPG
+- Open World
+- FPS / Action
+- Horror
+- Indie / Roguelikes
+- Strategy
+- Sony ports
+- Competitive / Live Service
+- Sim / Strategy / Survival
+- Xbox / Capcom / Action
+
+---
+
+## ⏱️ Scheduler
+
+El scheduler ahora está configurado para producción:
+
+- **Primera sincronización inmediata** al iniciar la app
+- **Frecuencia posterior:** cada **6 horas**
+
+### Flujo
+
+```text
+FastAPI lifespan
+    └── crea thread daemon
+            └── scheduler.run_scheduler()
+                    ├── job_steam_sync() inmediato
+                    └── schedule.run_pending() en bucle
 ```
-scheduler.py
-    │
-    ├─ Cada 1 minuto llama a job_steam_sync()
-    │
-    └─ SteamCollector.fetch_app_data(app_id)
-            │
-            ├─ GET https://store.steampowered.com/api/appdetails?appids={id}&cc=us
-            │       └─ Devuelve: nombre, precio base, precio actual, % descuento
-            │
-            └─ GET https://store.steampowered.com/appreviews/{id}?json=1
-                    └─ Devuelve: total reseñas, reseñas positivas
-                         │
-                         └─ SteamCollector.save_to_db()
-                                 │
-                                 ├─ Crea o reutiliza registro en `games`
-                                 ├─ Inserta fila en `price_snapshots`
-                                 └─ Inserta fila en `reputation_snapshots`
-```
 
-**Juegos monitoreados actualmente (Steam App IDs):**
-| App ID | Juego |
+Ya no es obligatorio abrir una segunda terminal para que la recolección empiece cuando el servidor sube.
+
+---
+
+## 🌐 Rutas HTML
+
+| Ruta | Descripción |
 |---|---|
-| 1091500 | Cyberpunk 2077 |
-| 1245620 | Elden Ring |
-| 271590 | GTA V |
-| 1086940 | Baldur's Gate 3 |
-| 1174180 | Red Dead Redemption 2 |
-| 379720 | DOOM (2016) |
-
-### 2. Servidor web (`main.py`)
-
-FastAPI expone tres endpoints:
-
-| Endpoint | Descripción |
-|---|---|
+| `GET /` | Redirige a `/dashboard` |
+| `GET /dashboard` | Dashboard principal con métricas, HOT DEALS y TOP RATED |
+| `GET /catalog` | Catálogo completo con búsqueda, filtros y sort |
+| `GET /game/{slug}` | Página individual del juego |
 | `GET /health` | Estado del servicio |
-| `GET /dashboard` | Sirve el HTML del dashboard |
-| `GET /games` | Lista todos los juegos registrados |
-| `GET /deals` | Retorna el precio y reputación más reciente de cada juego |
-
-El endpoint `/deals` es el motor del dashboard: busca el **último snapshot** de precio y reputación para cada juego y los combina en un solo objeto JSON.
-
-### 3. Dashboard (`index.html`)
-
-El frontend hace un `fetch('/deals')` al cargar la página y renderiza tarjetas con:
-- Nombre del juego y desarrollador
-- Score de reputación (% positivo) y cantidad de reseñas
-- Precio original y precio con descuento
-- Badge verde si hay descuento activo
 
 ---
 
-## 🚀 Pasos para ejecutar el proyecto
+## 🔌 API REST
 
-### Prerrequisitos
-- Python 3.12+
-- Docker Desktop corriendo
-- El contenedor de PostgreSQL creado
+### `GET /api/deals`
+Devuelve los últimos snapshots consolidados por juego.
 
-### Paso 1 — Verificar que la base de datos Docker esté activa
+Ejemplo:
 
-```powershell
-docker start gamedealdb_container
+```json
+{
+  "juego": "Elden Ring",
+  "slug": "elden-ring",
+  "desarrollador": "FromSoftware",
+  "genero": "RPG",
+  "steam_app_id": "1245620",
+  "imagen_url": "https://cdn.akamai.steamstatic.com/steam/apps/1245620/header.jpg",
+  "precio_original": "USD 59.99",
+  "precio_oferta": "USD 35.99",
+  "descuento": 40,
+  "reputacion_score": 95.0,
+  "reputacion_reviews": 250000
+}
 ```
 
-Verifica que esté corriendo:
-```powershell
-docker ps
-```
-Debes ver `gamedealdb_container` en estado `Up`.
+### `GET /api/stats`
+Devuelve KPIs globales:
 
-### Paso 2 — Activar el entorno virtual
+```json
+{
+  "total_games": 122,
+  "games_on_sale": 48,
+  "best_discount": { ... },
+  "avg_reputation": 89.7
+}
+```
+
+### `GET /api/games`
+Devuelve todos los juegos con datos base + último snapshot de precio y reputación.
+
+### `GET /api/game/{slug}/data`
+Devuelve detalle para la página individual:
+
+```json
+{
+  "game": { ... },
+  "latest_price": { ... },
+  "latest_rep": { ... },
+  "price_history": [
+    { "fecha": "2025-01-01", "precio": 35.99, "descuento": 40 }
+  ]
+}
+```
+
+### Compatibilidad heredada
+
+Se mantienen:
+
+- `GET /games`
+- `GET /deals`
+
+como alias de los endpoints nuevos.
+
+---
+
+## 🖥️ Frontend rediseñado
+
+### Dashboard
+
+- Navbar fija tipo gaming
+- Hero con grid animado / scanlines
+- 4 contadores (`Total Juegos`, `En Oferta`, `Mejor Descuento`, `Promedio Reputación`)
+- Sección **🔥 HOT DEALS**
+- Sección **⭐ TOP RATED**
+- Auto-refresh cada 5 minutos
+- Cards con glow cyan/purple, hover y badge neón
+
+### Catálogo
+
+- Búsqueda en vivo por nombre o desarrollador
+- Chips de género generados desde `/api/games`
+- Ordenamiento por descuento, rating, precio y nombre
+- Contador de resultados
+- Estado vacío `No hay resultados`
+- Layout responsive con grid auto-fit
+
+### Detalle individual
+
+- Hero con imagen grande desde Steam CDN (`capsule_616x353.jpg`)
+- Metadatos principales del juego
+- Caja de precio con descuento
+- Botón directo a Steam
+- Módulo de reputación con barra de progreso
+- Historial de precios con **Chart.js**
+
+### Manejo de errores visuales
+
+- Todas las llamadas `fetch` validan `response.ok`
+- Mensajes de error amigables en dashboard, catálogo y detalle
+- Fallback visual si falla la carga de imágenes de Steam
+
+---
+
+## 🚀 Ejecución del proyecto
+
+### 1. Activar entorno virtual
 
 ```powershell
 cd C:\Users\Usuario\Downloads\gamedeal_insight_v1
 .\venv\Scripts\activate
 ```
 
-El prompt cambiará a `(venv)` confirmando que está activo.
-
-### Paso 3 — Crear las tablas (solo la primera vez)
+### 2. Inicializar / migrar esquema
 
 ```powershell
-python -m src.db.init_db
+.\venv\Scripts\python -m src.db.init_db
 ```
 
-### Paso 4 — Iniciar el servidor web
+### 3. Levantar FastAPI
 
-En una terminal:
 ```powershell
-uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+.\venv\Scripts\uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### Paso 5 — Iniciar el recolector de datos
+### 4. Abrir la app
 
-En **otra terminal separada** (con el venv activado):
-```powershell
-python -m src.scheduler
-```
-
-Este proceso hace la primera recolección inmediatamente y luego cada 1 minuto.
-
-### Paso 6 — Abrir el dashboard
-
-```
+```text
 http://localhost:8000/dashboard
 ```
 
-> **Nota:** El dashboard mostrará datos vacíos hasta que el scheduler complete su primera ejecución (~15 segundos).
+> El scheduler arranca automáticamente con el servidor y ejecuta una sincronización inicial en background.
 
 ---
 
-## ⚠️ Problemas conocidos y mejoras recomendadas
+## 🧪 Verificación recomendada
 
-Ver sección de mejoras en el README o en los comentarios del código.
+- `python -m compileall src limpiar_db.py`
+- `python -m src.db.init_db`
+- Verificar `/health`
+- Verificar `/api/stats`, `/api/deals`, `/api/game/{slug}/data`
+- Abrir `/dashboard`, `/catalog`, `/game/{slug}`
+
+---
+
+## 📌 Notas finales
+
+- `src/collectors/itad_collector.py` sigue siendo mock y no fue alterado.
+- Las imágenes provienen directamente de Steam CDN.
+- La experiencia visual está diseñada para escritorio y móvil usando layouts responsive.

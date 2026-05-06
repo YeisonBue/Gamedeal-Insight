@@ -1,152 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="0; url=/dashboard">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GameDeal Insight - Dashboard</title>
+    <title>GAMEDEAL.IO</title>
+    <script>window.location.replace('/dashboard');</script>
     <style>
-        :root {
-            --bg-primary: #121212;
-            --bg-secondary: #1e1e1e;
-            --accent-green: #00e676;
-            --text-main: #ffffff;
-            --text-dim: #aaaaaa;
-            --status-sale: #00e676;
-            --status-regular: #444;
-            --alert-red: #ff5252;
-        }
-
-        body { 
-            font-family: 'Inter', system-ui, -apple-system, sans-serif; 
-            background-color: var(--bg-primary); 
-            color: var(--text-main); 
-            margin: 0; 
-            padding: 20px; 
-        }
-
-        header { text-align: center; margin-bottom: 40px; }
-        h1 { color: var(--accent-green); margin-bottom: 5px; }
-        
-        .grid { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
-            gap: 20px; 
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .card { 
-            background-color: var(--bg-secondary); 
-            border-radius: 8px; 
-            padding: 20px; 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5); 
-            border-left: 4px solid var(--status-regular); 
-            display: flex; 
-            flex-direction: column; 
-            gap: 15px;
-        }
-
-        .card.on-sale { border-left-color: var(--status-sale); }
-
-        .game-title { font-size: 1.25rem; font-weight: 600; line-height: 1.2; }
-        .metadata { color: var(--text-dim); font-size: 0.85rem; }
-
-        .reputation { 
-            font-size: 0.9rem; 
-            color: #ffeb3b; 
-            display: flex; 
-            align-items: center; 
-            gap: 6px;
-        }
-
-        .price-container { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            background: #2c2c2c; 
-            padding: 12px; 
-            border-radius: 6px; 
-        }
-
-        .old-price { text-decoration: line-through; color: var(--alert-red); font-size: 0.8rem; }
-        .current-price { font-size: 1.3rem; font-weight: 700; }
-        .on-sale .current-price { color: var(--accent-green); }
-
-        .badge-discount { 
-            background-color: var(--accent-green); 
-            color: #000; 
-            padding: 4px 10px; 
-            border-radius: 4px; 
-            font-weight: 800; 
-            font-size: 0.75rem; 
-        }
-
-        .error-message { color: var(--alert-red); text-align: center; grid-column: 1 / -1; }
+        body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #080c14; color: #e2e8f0; font-family: Inter, system-ui, sans-serif; }
+        a { color: #00d4ff; }
     </style>
 </head>
 <body>
-
-    <header>
-        <h1>GameDeal Insight</h1>
-        <p style="color: var(--text-dim);">Market Intelligence: Price & Sentiment Analysis</p>
-    </header>
-
-    <main id="deals-container" class="grid"></main>
-
-    <script>
-        /**
-         * Fetch and render market data from the /deals endpoint
-         */
-        async function initDashboard() {
-            const container = document.getElementById('deals-container');
-            
-            try {
-                const response = await fetch('/deals');
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                
-                const data = await response.json();
-
-                if (data.length === 0) {
-                    container.innerHTML = '<p style="text-align:center;">No data records found.</p>';
-                    return;
-                }
-
-                container.innerHTML = data.map(item => {
-                    const hasDiscount = item.descuento > 0;
-                    
-                    return `
-                        <article class="card ${hasDiscount ? 'on-sale' : ''}">
-                            <div>
-                                <div class="game-title">${item.juego}</div>
-                                <div class="metadata">${item.desarrollador}</div>
-                            </div>
-
-                            <div class="reputation">
-                                <span>★</span>
-                                <span>${item.reputacion_score}% Positive</span>
-                                <span style="color: var(--text-dim); font-size: 0.75rem;">
-                                    (${item.reputacion_reviews.toLocaleString()} reviews)
-                                </span>
-                            </div>
-
-                            <div class="price-container">
-                                <div>
-                                    ${hasDiscount ? `<div class="old-price">${item.precio_original}</div>` : ''}
-                                    <div class="current-price">${item.precio_oferta}</div>
-                                </div>
-                                ${hasDiscount ? `<div class="badge-discount">-${item.descuento}%</div>` : ''}
-                            </div>
-                        </article>
-                    `;
-                }).join('');
-
-            } catch (error) {
-                console.error("Dashboard Sync Error:", error);
-                container.innerHTML = `<div class="error-message">Service unavailable. Failed to synchronize with database.</div>`;
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', initDashboard);
-    </script>
+    <p>Redirigiendo al dashboard... <a href="/dashboard">Continuar</a></p>
 </body>
 </html>
