@@ -435,6 +435,19 @@
                 <a href="/dashboard">Dashboard</a>
                 <a href="/catalog" class="active">Catálogo</a>
                 <a href="https://github.com/YeisonBue/Gamedeal-Insight" target="_blank" rel="noreferrer">GitHub</a>
+                <select id="currencySelect" title="Seleccionar moneda" style="background:#111827;color:#00d4ff;border:1px solid #1e3253;border-radius:6px;padding:4px 8px;font-size:.85rem;cursor:pointer;outline:none;">
+                    <option value="USD">$ USD</option>
+                    <option value="COP">$ COP</option>
+                    <option value="EUR">€ EUR</option>
+                    <option value="GBP">£ GBP</option>
+                    <option value="BRL">R$ BRL</option>
+                    <option value="MXN">$ MXN</option>
+                    <option value="ARS">$ ARS</option>
+                    <option value="CLP">$ CLP</option>
+                    <option value="CAD">$ CAD</option>
+                    <option value="JPY">¥ JPY</option>
+                    <option value="AUD">$ AUD</option>
+                </select>
             </div>
         </div>
     </nav>
@@ -625,10 +638,12 @@
             grid.innerHTML = '<div class="status-note">Cargando catálogo...</div>';
             errorEl.hidden = true;
 
+            const currency = document.getElementById('currencySelect').value;
+
             try {
                 const [deals, games] = await Promise.all([
-                    fetchJson('/api/deals'),
-                    fetchJson('/api/games'),
+                    fetchJson(`/api/deals?currency=${currency}`),
+                    fetchJson(`/api/games?currency=${currency}`),
                 ]);
 
                 state.deals = deals;
@@ -654,7 +669,16 @@
             renderCatalog();
         });
 
-        document.addEventListener('DOMContentLoaded', initCatalog);
+        document.addEventListener('DOMContentLoaded', () => {
+            const sel = document.getElementById('currencySelect');
+            const saved = localStorage.getItem('gamedeal_currency');
+            if (saved) sel.value = saved;
+            sel.addEventListener('change', () => {
+                localStorage.setItem('gamedeal_currency', sel.value);
+                initCatalog();
+            });
+            initCatalog();
+        });
     </script>
 </body>
 </html>

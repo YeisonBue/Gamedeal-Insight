@@ -7,8 +7,9 @@ import httpx
 from sqlalchemy import or_
 
 from src.db.database import SessionLocal
-from src.models.models import Game, PriceSnapshot, ReputationSnapshot
+from src.models.models import DiscoveredAppId, Game, PriceSnapshot, ReputationSnapshot
 
+# Static seed list kept as fallback for first run before discovery completes
 TARGET_APP_IDS = [
     # Souls / Action RPG
     "1245620", "814380", "374320", "570940", "230050",
@@ -78,6 +79,88 @@ def parse_release_date(app_data: dict):
     return None
 
 
+def _price_changed(session, game_id: int, new_price: float, new_discount: float) -> bool:
+    """Return True only when Steam price or discount changed since the last snapshot."""
+    last = (
+        session.query(PriceSnapshot)
+        .filter(
+            PriceSnapshot.game_id == game_id,
+            PriceSnapshot.platform == "steam",
+        )
+        .order_by(PriceSnapshot.fecha_captura.desc())
+        .first()
+    )
+    if not last:
+        return True
+    price_delta = abs((last.precio_actual or 0) - new_price)
+    discount_delta = abs((last.descuento_porcentaje or 0) - new_discount)
+    return price_delta > 0.01 or discount_delta > 0.5
+
+
+def get_pending_app_ids() -> list[str]:
+    """Return App IDs that have never been processed or are due for a 24-hour refresh."""
+    db = SessionLocal()
+    try:
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=24)
+        rows = (
+            db.query(DiscoveredAppId)
+            .filter(
+                or_(
+                    DiscoveredAppId.processed == False,  # noqa: E712
+                    DiscoveredAppId.last_check < cutoff,
+                )
+            )
+            .all()
+        )
+        return [r.app_id for r in rows]
+    finally:
+        db.close()
+
+
+def seed_static_app_ids():
+    """Persist TARGET_APP_IDS to discovered_app_ids if not already there."""
+    db = SessionLocal()
+    try:
+        existing = {r.app_id for r in db.query(DiscoveredAppId.app_id).all()}
+        new_rows = [
+            DiscoveredAppId(app_id=aid)
+            for aid in TARGET_APP_IDS
+            if aid not in existing
+        ]
+        if new_rows:
+            db.add_all(new_rows)
+            db.commit()
+            logger.info(f"Seeded {len(new_rows)} static App IDs into discovery table.")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Static seed failed: {e}")
+    finally:
+        db.close()
+
+
+def register_discovered_ids(app_ids: list[str]):
+    """Upsert a batch of discovered App IDs without resetting already-processed ones."""
+    if not app_ids:
+        return
+    db = SessionLocal()
+    try:
+        existing = {r.app_id for r in db.query(DiscoveredAppId.app_id).all()}
+        new_rows = [
+            DiscoveredAppId(app_id=aid)
+            for aid in app_ids
+            if aid not in existing
+        ]
+        if new_rows:
+            db.add_all(new_rows)
+            db.commit()
+            logger.info(f"Registered {len(new_rows)} newly discovered App IDs.")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Discovery registration failed: {e}")
+    finally:
+        db.close()
+
+
 class SteamCollector:
     def __init__(self):
         self.base_url = "https://store.steampowered.com/api/appdetails"
@@ -126,8 +209,9 @@ class SteamCollector:
                 return None
 
     def save_to_db(self, app_data: dict, app_id: str = ""):
-        """Persist game metadata plus latest price and reputation snapshots."""
+        """Persist game metadata and snapshot only if price/data changed."""
         if not app_data:
+            self._mark_checked(app_id)
             return
 
         session = SessionLocal()
@@ -141,6 +225,7 @@ class SteamCollector:
             genre = app_data.get("genres", [{}])[0].get("description", "Action")
             developers = app_data.get("developers") or ["Unknown"]
             publishers = app_data.get("publishers") or ["Unknown"]
+            short_desc = app_data.get("short_description") or ""
 
             game = session.query(Game).filter(
                 or_(Game.steam_app_id == app_id, Game.nombre == name)
@@ -159,32 +244,46 @@ class SteamCollector:
             game.plataforma = "PC"
             game.steam_app_id = app_id or game.steam_app_id
             game.imagen_url = header_image or game.imagen_url
+            game.descripcion = short_desc or game.descripcion
+            game.last_scraped_at = datetime.datetime.now(datetime.timezone.utc)
 
             session.flush()
 
             pricing = app_data.get("price_overview")
             if pricing:
-                session.add(
-                    PriceSnapshot(
-                        game_id=game.id,
-                        source_id=1,
-                        precio_actual=pricing.get("final", 0) / 100.0,
-                        precio_base=pricing.get("initial", 0) / 100.0,
-                        descuento_porcentaje=float(pricing.get("discount_percent", 0)),
-                        moneda=pricing.get("currency", "USD"),
+                new_price = pricing.get("final", 0) / 100.0
+                new_base = pricing.get("initial", 0) / 100.0
+                new_discount = float(pricing.get("discount_percent", 0))
+
+                if _price_changed(session, game.id, new_price, new_discount):
+                    session.add(
+                        PriceSnapshot(
+                            game_id=game.id,
+                            source_id=1,
+                            platform="steam",
+                            precio_actual=new_price,
+                            precio_base=new_base,
+                            descuento_porcentaje=new_discount,
+                            moneda=pricing.get("currency", "USD"),
+                        )
                     )
-                )
+                    logger.info(f"Price updated for {name}: ${new_price} (-{new_discount}%)")
+                else:
+                    logger.debug(f"Price unchanged for {name}, skipping snapshot.")
+
             elif app_data.get("is_free"):
-                session.add(
-                    PriceSnapshot(
-                        game_id=game.id,
-                        source_id=1,
-                        precio_actual=0.0,
-                        precio_base=0.0,
-                        descuento_porcentaje=0.0,
-                        moneda="USD",
+                if _price_changed(session, game.id, 0.0, 0.0):
+                    session.add(
+                        PriceSnapshot(
+                            game_id=game.id,
+                            source_id=1,
+                            platform="steam",
+                            precio_actual=0.0,
+                            precio_base=0.0,
+                            descuento_porcentaje=0.0,
+                            moneda="USD",
+                        )
                     )
-                )
 
             rep = app_data.get("reputation_summary") or {}
             total = rep.get("total_reviews", 0)
@@ -208,6 +307,24 @@ class SteamCollector:
             logger.error(f"DB transaction failed for AppID {app_id}: {e}")
         finally:
             session.close()
+
+        self._mark_checked(app_id)
+
+    def _mark_checked(self, app_id: str):
+        """Update DiscoveredAppId to mark this ID as processed and set last_check."""
+        if not app_id:
+            return
+        db = SessionLocal()
+        try:
+            row = db.query(DiscoveredAppId).filter_by(app_id=app_id).first()
+            if row:
+                row.processed = True
+                row.last_check = datetime.datetime.now(datetime.timezone.utc)
+                db.commit()
+        except Exception:
+            db.rollback()
+        finally:
+            db.close()
 
 
 async def main():

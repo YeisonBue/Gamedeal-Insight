@@ -584,6 +584,19 @@
                 <a href="/dashboard" class="active">Dashboard</a>
                 <a href="/catalog">Catálogo</a>
                 <a href="https://github.com/YeisonBue/Gamedeal-Insight" target="_blank" rel="noreferrer">GitHub</a>
+                <select id="currencySelect" title="Seleccionar moneda" style="background:#111827;color:#00d4ff;border:1px solid #1e3253;border-radius:6px;padding:4px 8px;font-size:.85rem;cursor:pointer;outline:none;">
+                    <option value="USD">$ USD</option>
+                    <option value="COP">$ COP</option>
+                    <option value="EUR">€ EUR</option>
+                    <option value="GBP">£ GBP</option>
+                    <option value="BRL">R$ BRL</option>
+                    <option value="MXN">$ MXN</option>
+                    <option value="ARS">$ ARS</option>
+                    <option value="CLP">$ CLP</option>
+                    <option value="CAD">$ CAD</option>
+                    <option value="JPY">¥ JPY</option>
+                    <option value="AUD">$ AUD</option>
+                </select>
             </div>
         </div>
     </nav>
@@ -775,10 +788,12 @@
             topRatedEl.innerHTML = '<div class="status-note">Cargando top rated...</div>';
             errorEl.hidden = true;
 
+            const currency = document.getElementById('currencySelect').value;
+
             try {
                 const [stats, deals] = await Promise.all([
-                    fetchJson('/api/stats'),
-                    fetchJson('/api/deals'),
+                    fetchJson(`/api/stats?currency=${currency}`),
+                    fetchJson(`/api/deals?currency=${currency}`),
                 ]);
 
                 updateStats(stats);
@@ -795,6 +810,13 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            const sel = document.getElementById('currencySelect');
+            const saved = localStorage.getItem('gamedeal_currency');
+            if (saved) sel.value = saved;
+            sel.addEventListener('change', () => {
+                localStorage.setItem('gamedeal_currency', sel.value);
+                loadDashboard();
+            });
             loadDashboard();
             setInterval(loadDashboard, 300000);
         });

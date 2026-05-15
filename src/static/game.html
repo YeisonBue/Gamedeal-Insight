@@ -379,6 +379,19 @@
                 <a href="/dashboard">Dashboard</a>
                 <a href="/catalog" class="active">Catálogo</a>
                 <a href="https://github.com/YeisonBue/Gamedeal-Insight" target="_blank" rel="noreferrer">GitHub</a>
+                <select id="currencySelect" title="Seleccionar moneda" style="background:#111827;color:#00d4ff;border:1px solid #1e3253;border-radius:6px;padding:4px 8px;font-size:.85rem;cursor:pointer;outline:none;">
+                    <option value="USD">$ USD</option>
+                    <option value="COP">$ COP</option>
+                    <option value="EUR">€ EUR</option>
+                    <option value="GBP">£ GBP</option>
+                    <option value="BRL">R$ BRL</option>
+                    <option value="MXN">$ MXN</option>
+                    <option value="ARS">$ ARS</option>
+                    <option value="CLP">$ CLP</option>
+                    <option value="CAD">$ CAD</option>
+                    <option value="JPY">¥ JPY</option>
+                    <option value="AUD">$ AUD</option>
+                </select>
             </div>
         </div>
     </nav>
@@ -441,6 +454,26 @@
             </div>
             <div id="historyEmpty" class="empty-state" hidden>No hay historial suficiente para graficar este título.</div>
         </section>
+
+        <section class="panel" id="platformSection" style="display:none;">
+            <h2>💰 Comparativa de precios por plataforma</h2>
+            <p style="color:var(--muted);font-size:.9rem;margin-top:0;">Precios actuales en las principales tiendas digitales.</p>
+            <div id="platformTable" style="overflow-x:auto;margin-top:1rem;">
+                <table style="width:100%;border-collapse:collapse;font-size:.9rem;">
+                    <thead>
+                        <tr style="color:var(--muted);text-align:left;border-bottom:1px solid var(--border);">
+                            <th style="padding:.6rem .8rem;">Plataforma</th>
+                            <th style="padding:.6rem .8rem;">Precio actual</th>
+                            <th style="padding:.6rem .8rem;">Precio base</th>
+                            <th style="padding:.6rem .8rem;">Descuento</th>
+                            <th style="padding:.6rem .8rem;">Capturado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="platformRows"></tbody>
+                </table>
+            </div>
+            <div id="platformEmpty" class="empty-state" hidden>Aún no hay datos de otras plataformas para este juego. Se recopilarán en el próximo ciclo del scheduler.</div>
+        </section>
     </main>
 
     <footer>
@@ -461,6 +494,10 @@
     <script>
         const slug = window.location.pathname.split('/').pop();
         let priceChart;
+
+        function getCurrency() {
+            return document.getElementById('currencySelect').value;
+        }
 
         function formatDate(value) {
             if (!value) return '--';
@@ -500,7 +537,7 @@
                 data: {
                     labels: history.map(point => point.fecha),
                     datasets: [{
-                        label: 'Precio actual',
+                        label: `Precio actual (${history[0]?.moneda || 'USD'})`,
                         data: history.map(point => point.precio),
                         borderColor: '#00d4ff',
                         backgroundColor: 'rgba(0, 212, 255, 0.15)',
@@ -529,14 +566,56 @@
             });
         }
 
-        async function loadGame() {
-            try {
-                const response = await fetch(`/api/game/${encodeURIComponent(slug)}/data`);
-                if (!response.ok) {
-                    throw new Error(`Request failed: ${response.status}`);
-                }
+        function renderPlatformPrices(platforms) {
+            const section = document.getElementById('platformSection');
+            const tbody = document.getElementById('platformRows');
+            const emptyEl = document.getElementById('platformEmpty');
 
-                const payload = await response.json();
+            if (!platforms || !platforms.length) {
+                section.style.display = 'block';
+                tbody.closest('table').style.display = 'none';
+                emptyEl.hidden = false;
+                return;
+            }
+
+            section.style.display = 'block';
+            tbody.closest('table').style.display = 'table';
+            emptyEl.hidden = true;
+
+            const isBest = platforms[0];
+            tbody.innerHTML = platforms.map((p, idx) => {
+                const isLowest = idx === 0;
+                const hasDiscount = p.discount > 0;
+                return `<tr style="border-bottom:1px solid var(--border);${isLowest ? 'background:rgba(0,212,255,.04);' : ''}">
+                    <td style="padding:.6rem .8rem;font-weight:600;${isLowest ? 'color:var(--cyan);' : ''}">${escapeHtml(p.platform)}${isLowest ? ' 🏆' : ''}</td>
+                    <td style="padding:.6rem .8rem;font-weight:700;${hasDiscount ? 'color:var(--green);' : ''}">${escapeHtml(p.price_formatted)}</td>
+                    <td style="padding:.6rem .8rem;color:var(--muted);text-decoration:${hasDiscount ? 'line-through' : 'none'};">${p.base_price > 0 ? escapeHtml(String(p.price_formatted).replace(p.price.toFixed(2), p.base_price.toFixed(2))) : '--'}</td>
+                    <td style="padding:.6rem .8rem;">${hasDiscount ? `<span style="background:var(--green);color:#fff;padding:2px 7px;border-radius:4px;font-size:.78rem;font-weight:700;">-${p.discount}%</span>` : '<span style="color:var(--muted);">—</span>'}</td>
+                    <td style="padding:.6rem .8rem;color:var(--muted);font-size:.8rem;">${formatDate(p.captured_at)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function escapeHtml(value = '') {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        async function loadGame() {
+            const currency = getCurrency();
+            try {
+                const [payload, platformData] = await Promise.all([
+                    fetch(`/api/game/${encodeURIComponent(slug)}/data?currency=${currency}`).then(r => {
+                        if (!r.ok) throw new Error(`Request failed: ${r.status}`);
+                        return r.json();
+                    }),
+                    fetch(`/api/game/${encodeURIComponent(slug)}/platform-prices?currency=${currency}`).then(r => r.ok ? r.json() : null).catch(() => null),
+                ]);
+
                 const { game, latest_price: latestPrice, latest_rep: latestRep, price_history: priceHistory } = payload;
                 const appId = game.steam_app_id || '';
                 const capsule = appId ? `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg` : game.imagen_url;
@@ -544,7 +623,7 @@
                 document.title = `GAMEDEAL.IO | ${game.nombre}`;
                 document.getElementById('genreChip').textContent = game.genero || 'Action';
                 document.getElementById('gameTitle').textContent = game.nombre || 'Juego sin nombre';
-                document.getElementById('subtitle').textContent = `${game.desarrollador || 'Desarrollador desconocido'} · ${game.publisher || 'Publisher desconocido'} · ${game.plataforma || 'PC'}`;
+                document.getElementById('subtitle').textContent = game.descripcion || `${game.desarrollador || 'Desarrollador desconocido'} · ${game.publisher || 'Publisher desconocido'} · ${game.plataforma || 'PC'}`;
                 document.getElementById('developerValue').textContent = game.desarrollador || '--';
                 document.getElementById('publisherValue').textContent = game.publisher || '--';
                 document.getElementById('appIdValue').textContent = appId || '--';
@@ -577,6 +656,7 @@
                 document.getElementById('snapshotDate').textContent = formatDate(latestPrice?.fecha_captura);
 
                 renderChart(priceHistory || []);
+                renderPlatformPrices(platformData?.platforms || []);
             } catch (error) {
                 console.error(error);
                 showError('No se pudo cargar el detalle del juego. Verifica el slug o el estado de la API.');
@@ -586,7 +666,16 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', loadGame);
+        document.addEventListener('DOMContentLoaded', () => {
+            const sel = document.getElementById('currencySelect');
+            const saved = localStorage.getItem('gamedeal_currency');
+            if (saved) sel.value = saved;
+            sel.addEventListener('change', () => {
+                localStorage.setItem('gamedeal_currency', sel.value);
+                loadGame();
+            });
+            loadGame();
+        });
     </script>
 </body>
 </html>
