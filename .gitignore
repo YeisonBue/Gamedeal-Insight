@@ -50,3 +50,5 @@ scraping/output/*.json
 .pytest_cache/
 .coverage
 htmlcov/
+
+expo.md

@@ -128,34 +128,21 @@ def run_scheduler():
     Entry point called from main.py lifespan.
 
     Startup sequence:
-      1. Seed static App IDs into discovery table.
-      2. Fetch currency rates (or use fallback).
-      3. Run first Steam sync immediately.
-      4. Launch background discovery thread (non-blocking).
-      5. After discovery finishes, schedule will pick up new IDs on next cycle.
+      1. Seed static App IDs into discovery table (fast, sync).
+      2. Fetch currency rates (fast, sync).
+      3. Launch Steam sync, App ID discovery, and platform prices
+         all in parallel background threads — server becomes available immediately.
     """
-    # 1. Seed static IDs so first sync has work to do
     seed_static_app_ids()
-
-    # 2. Currency rates
     job_currency_rates()
 
-    # 3. Immediate first Steam sync
-    job_steam_sync()
+    for name, target in [
+        ("SteamSyncInit",      job_steam_sync),
+        ("AppIDDiscovery",     job_discover_app_ids),
+        ("PlatformPricesInit", job_platform_prices),
+    ]:
+        threading.Thread(target=target, daemon=True, name=name).start()
 
-    # 4. Background App ID discovery (does NOT block the sync loop)
-    discovery_thread = threading.Thread(
-        target=job_discover_app_ids, daemon=True, name="AppIDDiscovery"
-    )
-    discovery_thread.start()
-
-    # 5. Platform prices immediately after first Steam sync (background thread)
-    platform_thread = threading.Thread(
-        target=job_platform_prices, daemon=True, name="PlatformPricesInit"
-    )
-    platform_thread.start()
-
-    # 6. Scheduler loop
     while True:
         schedule.run_pending()
         time.sleep(1)

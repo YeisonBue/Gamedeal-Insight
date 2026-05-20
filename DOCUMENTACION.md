@@ -1,502 +1,429 @@
-# 🎮 GameDeal Insight — Documentación Técnica v3.0
+# 🎮 GameDeal Insight — Documentación Técnica v4.0
 
-## Resumen
+## ¿Qué es este proyecto?
 
-**GameDeal Insight** es un sistema de inteligencia de precios gaming que:
+**GameDeal Insight** es una aplicación web de inteligencia de precios para videojuegos. Su objetivo es responder a la pregunta: *¿dónde compro este juego más barato ahora mismo, y realmente vale la pena?*
 
-- **Descubre App IDs de Steam dinámicamente** mediante scraping en segundo plano al iniciar
-- Sincroniza **precio, metadata y reputación** para cada juego usando la API oficial de Steam
-- Aplica **actualización inteligente**: solo registra un nuevo snapshot cuando el precio o descuento cambia
-- Compara precios de un mismo juego en **múltiples plataformas** (Steam, GOG, Epic, Humble, etc.) vía [CheapShark API](https://apidocs.cheapshark.com/)
-- Soporta **conversión de moneda en tiempo real** (USD, COP, EUR, GBP, BRL, MXN, ARS, CLP, CAD, JPY, AUD) con tasas cacheadas desde `open.er-api.com`
-- Expone páginas HTML gaming para dashboard, catálogo y detalle individual
+Para eso, el sistema:
+
+1. **Descubre juegos automáticamente** scrapeando Steam Search al arrancar, sin necesidad de una lista manual.
+2. **Sincroniza precios y reputación** usando la API oficial de Steam.
+3. **Compara precios entre tiendas** (Steam, GOG, Epic, Humble, Fanatical, etc.) usando la API gratuita de CheapShark.
+4. **Convierte precios a 12 monedas** en tiempo real con tasas cacheadas desde open.er-api.com.
+5. **Expone páginas web** (dashboard, catálogo, detalle) y una API REST que alimenta esas páginas.
+
+Toda la recolección de datos ocurre en segundo plano sin bloquear el servidor.
 
 ---
 
-## 🏗️ Arquitectura
+## 🏗️ Arquitectura general
 
-```text
-Al iniciar:
-  [Steam Search HTML scraping] ──► [DiscoveredAppId table]  (hilo daemon, no bloquea)
-  [static TARGET_APP_IDS]      ──► [DiscoveredAppId table]  (seed inmediato)
-
-Ciclo Steam (cada 6h + inmediato):
-  [DiscoveredAppId table] ──► [Steam App Details API] ──► [games + price_snapshots + reputation_snapshots]
-                                                            ↑ solo si precio/descuento cambió
-
-Ciclo multi-plataforma (cada 12h):
-  [games table] ──► [CheapShark API] ──► [price_snapshots] (platform = "Steam"/"GOG"/"Epic"…)
-
-Ciclo monedas (cada 12h):
-  [open.er-api.com] ──► [currency_rates table]
-
-FastAPI src/main.py
-    ├── Páginas HTML estáticas
-    │   ├── /dashboard  (con selector de moneda y live refresh)
-    │   ├── /catalog    (filtros, búsqueda, ordenamiento)
-    │   └── /game/{slug}  (precio, reputación, historial, comparativa multi-plataforma)
-    └── API JSON
-        ├── /api/deals?currency=COP
-        ├── /api/stats?currency=COP
-        ├── /api/games?currency=COP
-        ├── /api/game/{slug}/data?currency=COP
-        ├── /api/game/{slug}/platform-prices?currency=COP   ← NUEVO
-        ├── /api/currency/rates                             ← NUEVO
-        └── /api/currency/convert?amount=59.99&to=COP       ← NUEVO
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        FastAPI (src/main.py)                    │
+│   /dashboard   /catalog   /game/{slug}   /api/...   /health     │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ lee de
+                    ┌────────▼────────┐
+                    │   PostgreSQL    │
+                    │  (SQLAlchemy)   │
+                    └────────▲────────┘
+                             │ escribe
+┌────────────────────────────┴────────────────────────────────────┐
+│               Scheduler (src/scheduler.py) — daemon thread      │
+│                                                                  │
+│  Al arrancar (paralelo, no bloquea el servidor):                 │
+│  ├── SteamSyncInit     → Steam API → games + snapshots          │
+│  ├── AppIDDiscovery    → Steam Search HTML → discovered_app_ids │
+│  └── PlatformPricesInit→ CheapShark API → price_snapshots       │
+│                                                                  │
+│  Recurrente:                                                     │
+│  ├── Steam sync        cada 6h                                   │
+│  ├── Platform prices   cada 12h                                  │
+│  └── Currency rates    cada 12h                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Archivos clave
+### Stack tecnológico
 
-| Archivo | Rol |
+| Capa | Tecnología |
 |---|---|
-| `src/models/models.py` | Modelos SQLAlchemy: `Game`, `PriceSnapshot`, `ReputationSnapshot`, `DiscoveredAppId`, `CurrencyRate` |
-| `src/db/init_db.py` | Crea tablas + migración automática de columnas nuevas |
-| `src/collectors/steam_collector.py` | Recolector Steam con lógica delta (no duplica snapshots iguales) |
-| `src/collectors/platform_collector.py` | Precios multi-plataforma via CheapShark API |
-| `src/services/currency_service.py` | Tasas de cambio en vivo cacheadas en BD |
-| `src/scheduler.py` | Orquestador: discovery + sync Steam + plataformas + monedas |
-| `src/main.py` | FastAPI con lifespan, todos los endpoints y conversión de moneda |
-| `src/static/dashboard.html` | Dashboard con selector de moneda persistido en localStorage |
-| `src/static/catalog.html` | Catálogo con selector de moneda |
-| `src/static/game.html` | Detalle con tabla de comparativa multi-plataforma |
-| `scraping/steam_scraper.py` | Descubrimiento de App IDs desde Steam Search (scraping HTML) |
+| Backend | Python 3.12 · FastAPI · Uvicorn |
+| ORM / BD | SQLAlchemy 2.0 · PostgreSQL 15 |
+| HTTP / Scraping | httpx · BeautifulSoup4 |
+| Scheduler | `schedule` library · `threading` |
+| Frontend | HTML + CSS + JavaScript vanilla · Chart.js |
+| Contenedores | Docker · Docker Compose |
+
+---
+
+## 📁 Estructura de archivos clave
+
+```
+src/
+├── main.py                     FastAPI: rutas HTML, API REST, lifespan
+├── scheduler.py                Orquestador de todos los jobs en background
+├── models/
+│   └── models.py               Modelos SQLAlchemy (5 tablas)
+├── db/
+│   ├── database.py             Engine + SessionLocal + Base
+│   └── init_db.py              create_all + migración automática de columnas
+├── collectors/
+│   ├── steam_collector.py      Recolector Steam con lógica delta
+│   ├── platform_collector.py   Precios multi-tienda via CheapShark
+│   └── itad_collector.py       Mock — no se usa en producción
+├── services/
+│   └── currency_service.py     Conversión de monedas on-the-fly
+└── static/
+    ├── dashboard.html
+    ├── catalog.html
+    └── game.html
+
+scraping/
+└── steam_scraper.py            Descubrimiento de App IDs desde Steam Search
+```
 
 ---
 
 ## 🗄️ Modelo de datos
 
 ### `games`
+Representa un videojuego sincronizado desde Steam.
 
-```text
-id (PK)
-nombre
-slug (único)
-genero
-desarrollador
-publisher
-fecha_lanzamiento
-plataforma
-steam_app_id
-imagen_url
-descripcion          ← NUEVO (short_description de Steam)
-last_scraped_at      ← NUEVO (timestamp de última sincronización)
-```
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | |
+| `nombre` | TEXT | Nombre del juego |
+| `slug` | TEXT UNIQUE | URL-friendly, ej. `elden-ring` |
+| `genero` | TEXT | |
+| `desarrollador` | TEXT | |
+| `publisher` | TEXT | |
+| `fecha_lanzamiento` | TEXT | |
+| `plataforma` | TEXT | Siempre `"PC"` |
+| `steam_app_id` | TEXT | ID de Steam (clave para buscar en CheapShark) |
+| `imagen_url` | TEXT | CDN de Steam |
+| `descripcion` | TEXT | Short description de Steam |
+| `last_scraped_at` | TIMESTAMP | Última sincronización exitosa |
 
 ### `price_snapshots`
+Historial de precios. Solo se inserta una fila nueva cuando el precio o descuento realmente cambia.
 
-```text
-id (PK)
-game_id (FK)
-source_id
-platform             ← NUEVO (ej. "steam", "GOG", "Epic Games", "Humble Store"…)
-precio_actual
-precio_base
-descuento_porcentaje
-moneda               (siempre USD en origen; conversión on-the-fly en API)
-fecha_captura
-```
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | |
+| `game_id` | FK → games | |
+| `source_id` | INT | 1 = Steam API, 2 = CheapShark |
+| `platform` | TEXT | `"steam"` (Steam API) o nombre de tienda (`"GOG"`, `"Epic Games Store"`, etc.) |
+| `precio_actual` | FLOAT | Precio con descuento, **siempre en USD** |
+| `precio_base` | FLOAT | Precio sin descuento, **siempre en USD** |
+| `descuento_porcentaje` | FLOAT | Ej. `40.0` = 40% |
+| `moneda` | TEXT | Siempre `"USD"` en BD; conversión es on-the-fly |
+| `fecha_captura` | TIMESTAMP | |
 
-> Solo se inserta un nuevo row si `|precio_actual_nuevo - precio_actual_anterior| > 0.01` o el descuento cambió en más de 0.5 puntos.
+> **Regla delta:** se inserta nuevo snapshot solo si `|precio_nuevo - precio_anterior| > $0.01` o `|descuento_nuevo - descuento_anterior| > 0.5%`.
 
 ### `reputation_snapshots`
+Reseñas de Steam por juego.
 
-```text
-id (PK)
-game_id (FK)
-source_id
-score_promedio
-cantidad_reseñas
-score_tipo
-fecha_captura
-```
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | |
+| `game_id` | FK → games | |
+| `score_promedio` | FLOAT | Ej. `95.0` = 95% positivo |
+| `cantidad_reseñas` | INT | Total de reseñas |
+| `score_tipo` | TEXT | `"Overwhelmingly Positive"`, `"Mixed"`, etc. |
+| `fecha_captura` | TIMESTAMP | |
 
-### `discovered_app_ids` ← NUEVA
+### `discovered_app_ids`
+Catálogo dinámico de App IDs de Steam. Es la fuente de verdad para qué juegos sincronizar.
 
-```text
-id (PK)
-app_id (único)          Steam App ID descubierto
-discovered_at
-processed               bool — true una vez sincronizado
-last_check              timestamp del último fetch
-```
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | |
+| `app_id` | TEXT UNIQUE | Steam App ID |
+| `discovered_at` | TIMESTAMP | |
+| `processed` | BOOL | `True` = ya fue sincronizado al menos una vez |
+| `last_check` | TIMESTAMP | Última sincronización con Steam API |
 
-### `currency_rates` ← NUEVA
+> El scheduler sincroniza los App IDs con `processed=False` **o** con `last_check` anterior a 24 horas.
 
-```text
-id (PK)
-code (único)            ej. "COP", "EUR"
-rate_from_usd           cuántas unidades de esta moneda equivalen a 1 USD
-updated_at
-```
+### `currency_rates`
+Tasas de cambio relativas a USD, cacheadas en BD.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `code` | TEXT UNIQUE | Ej. `"COP"`, `"EUR"` |
+| `rate_from_usd` | FLOAT | Unidades de esta moneda por 1 USD |
+| `updated_at` | TIMESTAMP | |
 
 ---
 
-## 🔄 Inicialización y migración automática
+## ⚙️ Inicialización y migración automática de BD
 
-`src/db/init_db.py` realiza:
+`src/db/init_db.py` hace dos cosas al ejecutarse:
 
-1. `Base.metadata.create_all(bind=engine)` — crea todas las tablas nuevas
-2. `_migrate_columns()` — agrega columnas nuevas con `ALTER TABLE` si la tabla ya existía sin ellas:
+1. **`Base.metadata.create_all()`** — crea todas las tablas si no existen.
+2. **`_migrate_columns()`** — agrega columnas nuevas con `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` si la tabla ya existía con un esquema anterior:
    - `games`: `descripcion`, `last_scraped_at`
    - `price_snapshots`: `platform` (default `'steam'`)
 
-Nunca es necesario borrar la BD para adoptar el nuevo esquema.
+**Nunca destruye datos.** Se puede re-ejecutar de forma segura.
 
 ---
 
-## 🔍 Descubrimiento de App IDs
+## 🔄 Flujo de arranque (Scheduler)
 
-### Flujo al iniciar
+Al iniciar FastAPI, el lifespan lanza un único hilo daemon que ejecuta `run_scheduler()`. Este hilo:
 
-```text
-1. seed_static_app_ids()
-       └── Inserta TARGET_APP_IDS (~122 IDs) en discovered_app_ids si no existen
+1. **`seed_static_app_ids()`** *(síncrono, rápido)* — inserta ~122 App IDs conocidos en `discovered_app_ids` si no existen.
+2. **`job_currency_rates()`** *(síncrono, rápido)* — descarga tasas de cambio o aplica fallback hardcodeado.
+3. Lanza **3 hilos daemon en paralelo**:
 
-2. job_discover_app_ids() [hilo daemon, no bloquea el servidor]
-       ├── scraping/steam_scraper.discover_app_ids(mode="topsellers", limit=150)
-       ├── scraping/steam_scraper.discover_app_ids(mode="specials", limit=100)
-       └── register_discovered_ids() → inserta los nuevos en discovered_app_ids
-```
+| Hilo | Qué hace | Tiempo aprox. |
+|---|---|---|
+| `SteamSyncInit` | Sincroniza metadata, precio y reputación para todos los App IDs pendientes | ~2-3 min |
+| `AppIDDiscovery` | Scrapea Steam Search (top sellers + specials) para descubrir nuevos App IDs | ~1-2 min |
+| `PlatformPricesInit` | Bulk fetch de CheapShark + fallback per-game para los no encontrados | ~10-15 min |
 
-### Qué se scrapeea
+El servidor queda disponible inmediatamente. Los datos se van poblando en background.
 
-`scraping/steam_scraper.py` hace scraping de `https://store.steampowered.com/search/results/` extrayendo el atributo `data-ds-appid` de cada tarjeta de resultado. Soporta 4 modos:
+### Jobs recurrentes
 
-| Modo | Descripción |
+| Job | Frecuencia |
 |---|---|
-| `topsellers` | Top ventas |
-| `specials` | Ofertas con mayor descuento |
-| `toprated` | Mejor valorados |
-| `newreleases` | Lanzamientos recientes |
+| Steam sync | Cada 6 horas |
+| Platform prices | Cada 12 horas |
+| Currency rates | Cada 12 horas |
 
 ---
 
-## ⚙️ Sincronización Steam (lógica delta)
+## 🔍 Recolector de Steam (`steam_collector.py`)
 
-`SteamCollector.save_to_db()` ahora:
+Usa la API oficial `https://store.steampowered.com/api/appdetails?appids={id}`.
 
-1. Hace upsert de metadata del juego (incluye `descripcion` y `last_scraped_at`)
-2. Antes de insertar un `PriceSnapshot`, llama a `_price_changed()`:
-   - Si el precio varió en más de $0.01 → inserta nuevo snapshot
-   - Si el descuento cambió en más de 0.5% → inserta nuevo snapshot
-   - Si nada cambió → no toca la BD (ahorra espacio y queries innecesarios)
-3. Marca el `DiscoveredAppId` como `processed=True` con `last_check` actual
-
-### Ciclo de re-verificación
-
-`get_pending_app_ids()` devuelve los App IDs que:
-- Nunca fueron procesados (`processed=False`), **o**
-- Su `last_check` es anterior a las últimas **24 horas**
-
-Esto garantiza que cada juego se actualiza como mínimo una vez al día.
+**`save_to_db()`** por cada App ID:
+1. Upsert de metadata del juego (nombre, género, imagen, descripción, `last_scraped_at`).
+2. Llama a `_price_changed()` antes de insertar un `PriceSnapshot`. Si el precio y el descuento son iguales al último registrado, **no toca la BD**.
+3. Guarda un `ReputationSnapshot` con el conteo y porcentaje de reseñas.
+4. Marca el `DiscoveredAppId` como `processed=True` y actualiza `last_check`.
 
 ---
 
-## 💰 Precios multi-plataforma
+## 💰 Recolector multi-plataforma (`platform_collector.py`)
 
-**Fuente:** [CheapShark API](https://apidocs.cheapshark.com/) — gratuita, sin API key.
+Usa la API gratuita de [CheapShark](https://apidocs.cheapshark.com/). Sin API key.
 
-### Plataformas rastreadas
+### Estrategia en dos fases
 
-| ID CheapShark | Tienda |
-|---|---|
-| 1 | Steam |
-| 7 | GOG |
-| 11 | Humble Store |
-| 3 | Green Man Gaming |
-| 13 | Fanatical |
-| 25 | Epic Games |
-| 2 | GamersGate |
-| 23 | GameBillet |
-| 31 | IndieGala |
+**Fase 1 — Bulk fetch:**
+Pagina por `/api/1.0/deals` en 3 pasadas de ordenamiento (DealRating, Savings, Price), hasta 30 páginas × 60 deals = 1.800 deals por pasada. Construye un índice `{ steamAppID → { tienda → precio } }`. Luego cruza ese índice con los juegos en BD por `steam_app_id`.
 
-### Flujo
+**Fase 2 — Fallback per-game:**
+Los juegos que no aparecieron en el índice bulk (porque CheapShark no incluyó su `steamAppID` en el feed general) se consultan individualmente con `GET /deals?steamAppID={id}`. Tarda ~2s por juego pero asegura cobertura máxima.
 
-```text
-collect_and_store_platform_prices(game_id, name, steam_app_id)
-    ├── Busca el juego en CheapShark por nombre / Steam App ID
-    ├── Obtiene deals de todas las tiendas disponibles
-    └── Para cada tienda: inserta PriceSnapshot(platform=nombre_tienda) solo si el precio cambió
-```
+### Tiendas rastreadas
 
-Los precios se almacenan **siempre en USD**. La conversión a otras monedas es on-the-fly en la API.
+| ID | Tienda | Activa |
+|---|---|---|
+| 1 | Steam | ✅ |
+| 2 | GamersGate | ✅ |
+| 3 | Green Man Gaming | ✅ |
+| 7 | GOG | ✅ |
+| 11 | Humble Store | ✅ |
+| 13 | Uplay | ✅ |
+| 15 | Fanatical | ✅ |
+| 21 | WinGameStore | ✅ |
+| 23 | GameBillet | ✅ |
+| 25 | Epic Games Store | ✅ |
+| 27 | Gamesplanet | ✅ |
+| 28 | Gamesload | ✅ |
+| 29 | 2Game | ✅ |
+| 30 | IndieGala | ✅ |
+| 35 | DreamGame | ✅ |
 
 ---
 
-## 🌍 Conversión de monedas
+## 🌍 Conversión de monedas (`currency_service.py`)
 
 **Fuente:** `https://open.er-api.com/v6/latest/USD` — gratuita, sin API key.
 
-### Monedas soportadas
+**Monedas soportadas:** `USD`, `COP`, `EUR`, `GBP`, `BRL`, `MXN`, `ARS`, `CLP`, `PEN`, `CAD`, `JPY`, `AUD`
 
-`USD`, `COP`, `EUR`, `GBP`, `BRL`, `MXN`, `ARS`, `CLP`, `PEN`, `CAD`, `JPY`, `AUD`
-
-### Tasas de emergencia
-
-Si la API externa no responde, `_seed_fallback_rates()` usa tasas aproximadas hardcodeadas para que la aplicación siga funcionando sin errores.
-
-### Lógica
+**Lógica:**
+- Las tasas se cachean en la tabla `currency_rates` y se refrescan cada 12 horas.
+- Si la API externa no responde, `_seed_fallback_rates()` usa tasas aproximadas hardcodeadas para que la app no falle.
+- **Los precios en BD siempre están en USD.** La conversión es siempre on-the-fly en los endpoints.
 
 ```python
-convert(amount_usd, "COP")  # → amount_usd * rate_from_usd["COP"]
-```
-
-Las tasas se refrescan automáticamente cada 12 horas si han pasado más de 12 horas desde la última actualización.
-
----
-
-## ⏱️ Scheduler
-
-Todos los jobs corren en un thread daemon lanzado desde el lifespan de FastAPI.
-
-| Job | Frecuencia | Descripción |
-|---|---|---|
-| `seed_static_app_ids` | Al iniciar | Siembra IDs estáticos en BD |
-| `job_currency_rates` | Al iniciar + cada 12h | Refresca tasas de cambio |
-| `job_steam_sync` | Al iniciar + cada 6h | Sincroniza precios y metadata de Steam |
-| `job_discover_app_ids` | Al iniciar (hilo separado) | Scraping de Steam Search para nuevos juegos |
-| `job_platform_prices` | Cada 12h | Recorre todos los juegos y actualiza precios en otras tiendas |
-
-### Flujo de arranque
-
-```text
-FastAPI lifespan
-    └── thread daemon → scheduler.run_scheduler()
-            ├── 1. seed_static_app_ids()
-            ├── 2. job_currency_rates()
-            ├── 3. job_steam_sync()
-            ├── 4. thread daemon → job_discover_app_ids() (no bloquea el loop)
-            └── 5. bucle schedule.run_pending()
+convert(59.99, "COP")  # → 59.99 * tasa_cop ≈ 245.959
 ```
 
 ---
 
-## 🌐 Rutas HTML
+## 🌐 Páginas HTML
 
-| Ruta | Descripción |
-|---|---|
-| `GET /` | Redirige a `/dashboard` |
-| `GET /dashboard` | Dashboard con métricas, HOT DEALS, TOP RATED y selector de moneda |
-| `GET /catalog` | Catálogo con búsqueda, filtros de género y selector de moneda |
-| `GET /game/{slug}` | Detalle del juego con comparativa multi-plataforma y selector de moneda |
-| `GET /health` | Estado del servicio |
+Archivos estáticos en `src/static/`. No usan ningún framework frontend — JavaScript vanilla + `fetch()`.
+
+### `/dashboard`
+- Panel "Focus Deal": el juego con mayor descuento del momento.
+- Contadores: total de juegos, en oferta, mejor descuento, promedio de reputación.
+- Sección **🔥 HOT DEALS**: top 8 por descuento.
+- Sección **⭐ TOP RATED**: top 8 por reputación.
+- Auto-refresh cada 5 minutos respetando la moneda seleccionada.
+
+### `/catalog`
+- Búsqueda en vivo por nombre o desarrollador.
+- Chips de género generados dinámicamente desde `/api/games`.
+- Ordenamiento por descuento, rating, precio y nombre.
+
+### `/game/{slug}`
+- Imagen hero desde Steam CDN (`capsule_616x353.jpg`).
+- Precio actual, precio base y descuento con botón directo a Steam.
+- Barra de reputación con porcentaje y cantidad de reseñas.
+- Gráfico de historial de precios con **Chart.js**.
+- **Tabla comparativa por tienda**: muestra precio, precio base, descuento y fecha de captura. La tienda más barata se resalta con 🏆.
+
+### Selector de moneda
+Disponible en las tres páginas. La selección se persiste en `localStorage` bajo la clave `gamedeal_currency` y se aplica a todas las llamadas a la API automáticamente.
 
 ---
 
 ## 🔌 API REST
 
-Todos los endpoints de precios aceptan el query param `?currency=` (default `USD`).
+Todos los endpoints de precios aceptan `?currency=` (default `USD`).
 
 ### `GET /api/deals?currency=COP`
-
-Devuelve deals ordenados por descuento y reputación, con precios convertidos.
-
+Devuelve los mejores deals ordenados por descuento × reputación.
 ```json
 {
   "juego": "Elden Ring",
   "slug": "elden-ring",
-  "descripcion": "The critically acclaimed action RPG...",
+  "descripcion": "The critically acclaimed...",
   "precio_original": "COP 249.958",
   "precio_oferta": "COP 149.975",
-  "precio_original_valor": 249958.0,
-  "precio_oferta_valor": 149975.0,
-  "moneda": "COP",
   "descuento": 40,
   "reputacion_score": 95.0,
-  "reputacion_reviews": 250000
+  "reputacion_reviews": 250000,
+  "moneda": "COP"
 }
 ```
 
 ### `GET /api/stats?currency=COP`
-
 ```json
 {
   "total_games": 200,
   "games_on_sale": 60,
-  "best_discount": { ... },
+  "best_discount": { "...": "..." },
   "avg_reputation": 89.7,
   "currency": "COP"
 }
 ```
 
-### `GET /api/games?currency=EUR`
-
-Lista todos los juegos con último snapshot de precio (convertido) y reputación.
-
 ### `GET /api/game/{slug}/data?currency=EUR`
-
-Detalle completo: metadata, precio, reputación e historial de precios (todos convertidos a la moneda solicitada).
-
+Detalle completo con historial de precios.
 ```json
 {
-  "game": { "nombre": "...", "descripcion": "...", ... },
-  "latest_price": {
-    "precio_actual": 33.52,
-    "precio_base": 55.87,
-    "moneda": "EUR",
-    "precio_actual_formateado": "EUR 33.52",
-    ...
-  },
-  "price_history": [
-    { "fecha": "2025-01-01", "precio": 33.52, "descuento": 40, "moneda": "EUR" }
-  ]
+  "game": { "nombre": "...", "descripcion": "...", "steam_app_id": "..." },
+  "latest_price": { "precio_actual": 33.52, "precio_base": 55.87, "moneda": "EUR" },
+  "price_history": [{ "fecha": "2025-01-01", "precio": 33.52, "descuento": 40 }]
 }
 ```
 
-### `GET /api/game/{slug}/platform-prices?currency=COP` ← NUEVO
-
-Tabla comparativa del precio más reciente por tienda.
-
+### `GET /api/game/{slug}/platform-prices?currency=COP`
+Tabla comparativa de la última captura por tienda, ordenada de menor a mayor precio.
 ```json
 {
   "game": "Elden Ring",
-  "slug": "elden-ring",
   "currency": "COP",
   "platforms": [
-    { "platform": "GOG",          "price": 141972, "base_price": 249958, "discount": 43.2, "price_formatted": "COP 141.972", "captured_at": "..." },
-    { "platform": "Steam",        "price": 149975, "base_price": 249958, "discount": 40.0, "price_formatted": "COP 149.975", "captured_at": "..." },
-    { "platform": "Humble Store", "price": 155972, "base_price": 249958, "discount": 37.6, "price_formatted": "COP 155.972", "captured_at": "..." }
+    { "platform": "GOG",   "price": 141972, "base_price": 249958, "discount": 43.2, "price_formatted": "COP 141.972" },
+    { "platform": "Steam", "price": 149975, "base_price": 249958, "discount": 40.0, "price_formatted": "COP 149.975" }
   ]
 }
 ```
 
-Los resultados vienen ordenados de menor a mayor precio.
-
-### `GET /api/currency/rates` ← NUEVO
-
+### `GET /api/currency/rates`
 ```json
-{
-  "base": "USD",
-  "rates": { "USD": 1.0, "COP": 4100.0, "EUR": 0.92, ... },
-  "supported": {
-    "COP": { "name": "Colombian Peso", "rate": 4100.0 },
-    ...
-  }
-}
+{ "base": "USD", "rates": { "COP": 4100.0, "EUR": 0.92 }, "supported": { "...": "..." } }
 ```
 
-### `GET /api/currency/convert?amount=59.99&to=COP` ← NUEVO
-
+### `GET /api/currency/convert?amount=59.99&to=COP`
 ```json
-{
-  "original": 59.99,
-  "from": "USD",
-  "to": "COP",
-  "converted": 245959.0,
-  "formatted": "COP 245.959"
-}
+{ "original": 59.99, "from": "USD", "to": "COP", "converted": 245959.0, "formatted": "COP 245.959" }
 ```
-
-### Rutas heredadas (compatibilidad)
-
-- `GET /games` → alias de `/api/games`
-- `GET /deals` → alias de `/api/deals`
-
----
-
-## 🖥️ Frontend
-
-### Selector de moneda
-
-Las tres páginas (dashboard, catálogo, juego) tienen un `<select>` en el navbar con las monedas soportadas. La selección se guarda en `localStorage` bajo la clave `gamedeal_currency` y persiste entre páginas y sesiones.
-
-### Dashboard
-
-- Hero con panel de "Focus deal" (mejor descuento del momento)
-- 4 contadores: Total juegos, En oferta, Mejor descuento, Promedio reputación
-- Sección **🔥 HOT DEALS** (top 8 por descuento)
-- Sección **⭐ TOP RATED** (top 8 por reputación)
-- Auto-refresh cada 5 minutos respetando la moneda seleccionada
-
-### Catálogo
-
-- Búsqueda en vivo por nombre o desarrollador
-- Chips de género generados dinámicamente desde `/api/games`
-- Ordenamiento por descuento, rating, precio (asc/desc) y nombre
-- Precios en la moneda activa
-
-### Detalle individual
-
-- Hero con imagen `capsule_616x353.jpg` de Steam CDN
-- Descripción corta del juego
-- Precio con descuento, botón directo a Steam
-- Módulo de reputación con barra de progreso
-- Gráfico de historial de precios con **Chart.js** (eje Y en moneda activa)
-- **Tabla "💰 Comparativa de precios por plataforma"** — muestra precio, precio base, descuento y fecha de captura por tienda; la más barata se resalta con 🏆
-
-### Manejo de errores
-
-- Todas las llamadas `fetch` validan `response.ok` antes de parsear
-- Mensajes amigables en caso de error de red o datos vacíos
-- Fallback visual si la imagen de Steam CDN no carga
 
 ---
 
 ## 🚀 Ejecución del proyecto
 
-### 1. Activar entorno virtual
+### Con Docker (recomendado)
+
+```bash
+docker-compose up --build
+```
+
+- Levanta PostgreSQL 15 en puerto `5432`.
+- Levanta FastAPI en puerto `8000`.
+- El contenedor `web` espera a que PostgreSQL esté listo (`healthcheck`) antes de arrancar.
+- Ejecuta `init_db` automáticamente antes de iniciar el servidor.
+
+```bash
+# Comandos útiles
+docker-compose up --build -d          # Modo background
+docker-compose logs -f web            # Ver logs en tiempo real
+docker-compose down                   # Detener
+docker-compose down -v                # Detener y borrar la BD
+```
+
+### Local (sin Docker)
+
+Requiere PostgreSQL corriendo localmente.
 
 ```powershell
-cd G:\Proyectos\gamedeal_insight_v1
+# Activar entorno virtual
 .\venv\Scripts\activate
-```
 
-### 2. Inicializar / migrar esquema
+# Configurar BD (opcional si usas otra URL)
+$env:DATABASE_URL = "postgresql://usuario:password@localhost/gamedealdb"
 
-```powershell
-.\venv\Scripts\python -m src.db.init_db
-```
-
-### 3. Levantar FastAPI
-
-```powershell
-.\venv\Scripts\uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-### 4. Abrir la app
-
-```text
-http://localhost:8000/dashboard
-```
-
-> Al iniciar, el scheduler arranca automáticamente:
-> - Siembra los IDs estáticos
-> - Descarga tasas de cambio
-> - Ejecuta la primera sincronización de Steam
-> - Lanza el descubrimiento de nuevos App IDs en segundo plano
-
----
-
-## 🧪 Verificación recomendada
-
-```powershell
-# Compilación
-python -m compileall src scraping
-
-# Esquema
+# Migrar/crear esquema
 python -m src.db.init_db
 
-# Imports
-python -c "from src.main import app; print('OK')"
+# Levantar servidor
+uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-
-Endpoints a verificar manualmente:
-
-- `GET /health`
-- `GET /api/stats?currency=COP`
-- `GET /api/deals?currency=EUR`
-- `GET /api/game/{slug}/data?currency=GBP`
-- `GET /api/game/{slug}/platform-prices?currency=COP`
-- `GET /api/currency/rates`
-- `GET /api/currency/convert?amount=59.99&to=COP`
 
 ---
 
-## 📌 Notas
+## 🧪 Verificación
 
-- `src/collectors/itad_collector.py` sigue siendo mock; no se usa en el flujo principal.
-- Los precios se almacenan siempre en **USD** en la BD; la conversión es siempre on-the-fly.
-- El scraping de Steam usa cookies `birthtime=0` y `mature_content=1` para evitar bloqueos de verificación de edad.
-- CheapShark no requiere API key y tiene rate limit generoso para uso personal.
-- Si `open.er-api.com` no responde, se usan tasas de emergencia hardcodeadas para evitar errores.
+```powershell
+# Verificar que todo compila
+python -m compileall src scraping -q
+
+# Verificar imports
+python -c "from src.main import app; print('OK')"
+
+# Migrar esquema (seguro re-ejecutar)
+python -m src.db.init_db
+```
+
+Endpoints a probar manualmente tras el arranque:
+```
+GET /health
+GET /api/stats?currency=COP
+GET /api/deals?currency=EUR
+GET /api/game/{slug}/platform-prices?currency=COP
+GET /api/currency/rates
+```
+
+---
+
+## 📌 Notas importantes
+
+- `src/collectors/itad_collector.py` es un mock y **no se usa** en el flujo principal.
+- Las cookies `birthtime=0` y `mature_content=1` en el scraper de Steam evitan las páginas de verificación de edad.
+- CheapShark no siempre tiene todos los juegos: solo los que están activamente listados en sus tiendas asociadas.
+- Si un juego muestra solo Steam en la comparativa, significa que CheapShark no lo tiene registrado en otras tiendas en ese momento.
+- Las migraciones de BD nunca eliminan columnas ni tablas existentes.
 

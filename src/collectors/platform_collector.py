@@ -21,17 +21,23 @@ logger = logging.getLogger(__name__)
 
 CHEAPSHARK_BASE = "https://www.cheapshark.com/api/1.0"
 
-# CheapShark store IDs → display names
+# CheapShark store IDs → display names (sourced from /api/1.0/stores, active only)
 STORE_MAP: dict[str, str] = {
     "1":  "Steam",
+    "2":  "GamersGate",
+    "3":  "Green Man Gaming",
     "7":  "GOG",
     "11": "Humble Store",
-    "3":  "Green Man Gaming",
-    "13": "Fanatical",
-    "25": "Epic Games",
-    "2":  "GamersGate",
+    "13": "Uplay",
+    "15": "Fanatical",
+    "21": "WinGameStore",
     "23": "GameBillet",
-    "31": "IndieGala",
+    "25": "Epic Games Store",
+    "27": "Gamesplanet",
+    "28": "Gamesload",
+    "29": "2Game",
+    "30": "IndieGala",
+    "35": "DreamGame",
 }
 
 _HEADERS = {
@@ -168,7 +174,9 @@ def bulk_store_platform_prices(index: dict[str, dict[str, dict]]) -> int:
         logger.error(f"Bulk store error: {e}")
     finally:
         db.close()
-    return stored
+
+    fallback = per_game_fallback_sync(index)
+    return stored + fallback
 
 
 # ──────────────────────────────────────────────────────────────
@@ -273,6 +281,61 @@ def collect_and_store_platform_prices(game_id: int, game_name: str, steam_app_id
         logger.error(f"Platform price save error [{game_name}]: {e}")
     finally:
         db.close()
+
+
+def per_game_fallback_sync(bulk_index: dict[str, dict[str, dict]]) -> int:
+    """
+    For games not matched by the bulk index, query CheapShark individually
+    using their Steam App ID. This catches games CheapShark doesn't associate
+    with a steamAppID in the /deals feed but does return via ?steamAppID= lookup.
+    """
+    db = SessionLocal()
+    try:
+        games = db.query(Game).filter(Game.steam_app_id.isnot(None)).all()
+        unmatched = [g for g in games if str(g.steam_app_id) not in bulk_index]
+    finally:
+        db.close()
+
+    if not unmatched:
+        return 0
+
+    logger.info(f"Fallback: {len(unmatched)} games not in bulk index — querying individually…")
+    stored = 0
+
+    for game in unmatched:
+        try:
+            prices = fetch_platform_prices(game.nombre, str(game.steam_app_id))
+            if not prices:
+                time.sleep(1)
+                continue
+            db = SessionLocal()
+            try:
+                for entry in prices:
+                    if _price_changed(db, game.id, entry["platform"], entry["price"], entry["discount"]):
+                        db.add(
+                            PriceSnapshot(
+                                game_id=game.id,
+                                source_id=2,
+                                platform=entry["platform"],
+                                precio_actual=entry["price"],
+                                precio_base=entry["base_price"],
+                                descuento_porcentaje=entry["discount"],
+                                moneda="USD",
+                            )
+                        )
+                        stored += 1
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Fallback save error [{game.nombre}]: {e}")
+            finally:
+                db.close()
+            time.sleep(2)
+        except Exception as e:
+            logger.warning(f"Fallback fetch failed [{game.nombre}]: {e}")
+
+    logger.info(f"Fallback sync done: {stored} new snapshots for {len(unmatched)} unmatched games.")
+    return stored
 
 
 def get_platform_prices_for_game(game_id: int) -> list[dict]:
